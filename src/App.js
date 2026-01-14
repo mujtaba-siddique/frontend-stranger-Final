@@ -147,114 +147,112 @@ function App() {
     
     console.log('🚀 Connecting with profile:', profileData);
     
-    socketService.connect();
+    const socket = socketService.connect();
     
-    setTimeout(() => {
-      socketService.onUserCreated((data) => {
-        console.log('User created:', data.userId);
-        setUserId(data.userId);
-      });
-
-      socketService.onMatched((data) => {
-        console.log('Matched with:', data.partnerId);
-        setState(STATES.CHATTING);
-        setPartnerId(data.partnerId);
-        setSessionId(data.sessionId);
-        showNotification('Connected with a stranger!', 'success');
-      });
-
-      socketService.onWaiting((data) => {
-        console.log('Waiting:', data.message);
-        setState(STATES.WAITING);
-        showNotification(data.message, 'info');
-      });
-
-      socketService.onNewMessage((message) => {
-        console.log('📩 Received message:', message.id);
-        setMessages(prev => [...prev, message]);
-        
-        if (document.hidden) {
-          notificationService.showMessageNotification(message.message);
-          notificationService.playNotificationSound();
-        }
-        
-        setTimeout(() => {
-          socketService.markMessageSeen(message.id);
-        }, 500);
-      });
-
-      socketService.onMessageSent((message) => {
-        console.log('📤 Message sent:', message.id, 'status:', message.status);
-        setMessages(prev => [...prev, message]);
-      });
-
-      socketService.onChatEnded((data) => {
-        showNotification(data.reason, 'warning');
-        setState(STATES.WAITING);
-        setMessages([]);
-        setPartnerId(null);
-        setSessionId(null);
-      });
-
-      socketService.onPartnerTyping((data) => {
-        console.log('📨 FRONTEND: Received partner-typing event:', data);
-        setIsPartnerTyping(data.typing);
-      });
-
-      socketService.onError((error) => {
-        showNotification(error.message, 'error');
-      });
-      
-      socketService.onMessageDelivered((data) => {
-        console.log('✅ Message delivered:', data.messageId);
-        setMessages(prev => prev.map(msg => 
-          msg.id === data.messageId ? { ...msg, status: 'delivered' } : msg
-        ));
-      });
-      
-      socketService.onMessageSeenByPartner((data) => {
-        console.log('👁️ Message seen:', data.messageId);
-        setMessages(prev => prev.map(msg => 
-          msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
-        ));
-      });
-      
-      // New unified status update handler
-      socketService.onMessageStatusUpdate((data) => {
-        console.log('📊 Message status update:', data.messageId, 'status:', data.status);
-        setMessages(prev => prev.map(msg => 
-          msg.id === data.messageId ? { ...msg, status: data.status } : msg
-        ));
-      });
-      
-      socketService.onMessageFailed((data) => {
-        console.log('❌ Message failed:', data.messageId, 'error:', data.error);
-        setMessages(prev => prev.map(msg => 
-          msg.id === data.messageId ? { ...msg, status: 'failed' } : msg
-        ));
-        showNotification(data.error, 'error');
-      });
-      
-      socketService.onEnableEndChat(() => {
-        console.log('🔓 End chat button enabled');
-      });
-      
-      // Initialize call listeners
-      callManager.initializeCallListeners();
-      
-      socketService.onSessionTimeout((data) => {
-        console.log('⏰ Session timeout:', data.reason);
-        setSessionTimeoutOpen(true);
-        setState(STATES.DISCONNECTED);
-        setMessages([]);
-        setPartnerId(null);
-        setSessionId(null);
-        showNotification(data.reason, 'warning');
-      });
-
-      console.log('Joining chat with profile ID:', profileData?.id);
+    socket.on('connect', () => {
+      console.log('✅ Socket connected, now joining chat');
       socketService.joinChat(profileData?.id);
-    }, 500);
+    });
+    
+    socketService.onUserCreated((data) => {
+      console.log('User created:', data.userId);
+      setUserId(data.userId);
+    });
+
+    socketService.onMatched((data) => {
+      console.log('Matched with:', data.partnerId);
+      setState(STATES.CHATTING);
+      setPartnerId(data.partnerId);
+      setSessionId(data.sessionId);
+      showNotification('Connected with a stranger!', 'success');
+    });
+
+    socketService.onWaiting((data) => {
+      console.log('Waiting:', data.message);
+      setState(STATES.WAITING);
+      showNotification(data.message, 'info');
+    });
+
+    socketService.onNewMessage((message) => {
+      console.log('📩 Received message:', message.id);
+      setMessages(prev => [...prev, message]);
+      
+      if (document.hidden) {
+        notificationService.showMessageNotification(message.message);
+        notificationService.playNotificationSound();
+      }
+      
+      setTimeout(() => {
+        socketService.markMessageSeen(message.id);
+      }, 500);
+    });
+
+    socketService.onMessageSent((message) => {
+      console.log('📤 Message sent:', message.id, 'status:', message.status);
+      setMessages(prev => [...prev, message]);
+    });
+
+    socketService.onChatEnded((data) => {
+      showNotification(data.reason, 'warning');
+      setState(STATES.WAITING);
+      setMessages([]);
+      setPartnerId(null);
+      setSessionId(null);
+    });
+
+    socketService.onPartnerTyping((data) => {
+      console.log('📨 FRONTEND: Received partner-typing event:', data);
+      setIsPartnerTyping(data.typing);
+    });
+
+    socketService.onError((error) => {
+      showNotification(error.message, 'error');
+    });
+    
+    socketService.onMessageDelivered((data) => {
+      console.log('✅ Message delivered:', data.messageId);
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId ? { ...msg, status: 'delivered' } : msg
+      ));
+    });
+    
+    socketService.onMessageSeenByPartner((data) => {
+      console.log('👁️ Message seen:', data.messageId);
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
+      ));
+    });
+    
+    socketService.onMessageStatusUpdate((data) => {
+      console.log('📊 Message status update:', data.messageId, 'status:', data.status);
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId ? { ...msg, status: data.status } : msg
+      ));
+    });
+    
+    socketService.onMessageFailed((data) => {
+      console.log('❌ Message failed:', data.messageId, 'error:', data.error);
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId ? { ...msg, status: 'failed' } : msg
+      ));
+      showNotification(data.error, 'error');
+    });
+    
+    socketService.onEnableEndChat(() => {
+      console.log('🔓 End chat button enabled');
+    });
+    
+    callManager.initializeCallListeners();
+    
+    socketService.onSessionTimeout((data) => {
+      console.log('⏰ Session timeout:', data.reason);
+      setSessionTimeoutOpen(true);
+      setState(STATES.DISCONNECTED);
+      setMessages([]);
+      setPartnerId(null);
+      setSessionId(null);
+      showNotification(data.reason, 'warning');
+    });
   };
 
   const handleSendMessage = (message, messageId) => {
