@@ -69,8 +69,8 @@ const AdminDashboard = ({ darkMode }) => {
 
   const fetchAnalytics = async () => {
     try {
-      // Simulate API calls
-      const response = await fetch('/api/admin/analytics');
+      const apiUrl = process.env.REACT_APP_API_URL;
+      const response = await fetch(`${apiUrl}/api/admin/analytics`);
       const data = await response.json();
       
       setStats(data.stats);

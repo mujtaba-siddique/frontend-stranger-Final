@@ -63,7 +63,10 @@ export const useChat = (showNotification, updateActivity) => {
 
   const handleProfileSubmit = useCallback(async (profileData) => {
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://192.168.29.73:5000';
+      const apiUrl = process.env.REACT_APP_API_URL;
+      if (!apiUrl) {
+        throw new Error('API URL not configured');
+      }
       const response = await fetch(`${apiUrl}/api/users/profile`, {
         method: 'POST',
         headers: {

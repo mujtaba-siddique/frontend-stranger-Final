@@ -90,9 +90,9 @@ function App() {
     console.log('Profile submitted:', profileData);
     const apiUrl = process.env.REACT_APP_API_URL;
     if (!apiUrl) {
-      throw new Error('REACT_APP_API_URL not configured');
+      showNotification('API URL not configured', 'error');
+      return;
     }
-    console.log('Using API URL:', apiUrl);
     
     try {
       const controller = new AbortController();
