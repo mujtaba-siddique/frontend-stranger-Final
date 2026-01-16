@@ -37,7 +37,6 @@ const useCallManager = (userId, partnerId) => {
   const CALL_TIMEOUT = 30000;
   const MAX_RECONNECT_ATTEMPTS = 3;
 
-  // Cleanup function
   const cleanup = useCallback(() => {
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
@@ -50,7 +49,6 @@ const useCallManager = (userId, partnerId) => {
     iceCandidateQueueRef.current = [];
   }, []);
 
-  // Monitor call quality
   const monitorCallQuality = useCallback(() => {
     if (!peerConnectionRef.current) return;
 
@@ -78,7 +76,6 @@ const useCallManager = (userId, partnerId) => {
     }, 3000);
   }, []);
 
-  // Process queued ICE candidates
   const processIceCandidateQueue = useCallback(async () => {
     if (!peerConnectionRef.current || peerConnectionRef.current.remoteDescription === null) return;
 
@@ -93,7 +90,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
-  // ICE restart for reconnection
   const iceRestart = useCallback(async () => {
     if (!peerConnectionRef.current || !callStateRef.current) return;
 
@@ -117,7 +113,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [partnerId, userId]);
 
-  // Reconnect call
   const reconnectCall = useCallback(async () => {
     if (!callStateRef.current || reconnectAttemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
       console.log('❌ Max reconnect attempts reached');
@@ -130,7 +125,6 @@ const useCallManager = (userId, partnerId) => {
     await iceRestart();
   }, [iceRestart]);
 
-  // Get user media with constraints
   const getUserMedia = useCallback(async (type) => {
     const constraints = {
       video: type === 'video' ? {
@@ -157,7 +151,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
-  // Setup peer connection handlers
   const setupPeerConnection = useCallback((pc, isInitiator, targetId) => {
     pc.ontrack = (event) => {
       console.log('📞 Remote track:', event.track.kind);
@@ -201,7 +194,57 @@ const useCallManager = (userId, partnerId) => {
     };
   }, [monitorCallQuality, reconnectCall]);
 
-  // Initialize listeners
+  const rejectCall = useCallback(() => {
+    console.log('📞 Rejecting call');
+    cleanup();
+    
+    if (incomingCallDataRef.current) {
+      socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
+    }
+    
+    setIsIncoming(false);
+    setCallType(null);
+    setCallerName('');
+    incomingCallDataRef.current = null;
+  }, [cleanup]);
+
+  const endCall = useCallback(() => {
+    console.log('📞 Ending call');
+    cleanup();
+    
+    isOfferSentRef.current = false;
+    isAnswerSentRef.current = false;
+    reconnectAttemptRef.current = 0;
+    callStateRef.current = null;
+    
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (localAudioRef.current) localAudioRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+
+    if (isCallActive && partnerId) {
+      socketService.sendCallEnd({ to: partnerId });
+    }
+
+    setIsCallActive(false);
+    setIsIncoming(false);
+    setCallType(null);
+    setIsVideoEnabled(true);
+    setIsAudioEnabled(true);
+    setCallQuality('good');
+    incomingCallDataRef.current = null;
+  }, [isCallActive, partnerId, cleanup]);
+
   const initializeCallListeners = useCallback(() => {
     if (listenersInitializedRef.current) return;
     
@@ -217,10 +260,8 @@ const useCallManager = (userId, partnerId) => {
       setIsIncoming(true);
 
       callTimeoutRef.current = setTimeout(() => {
-        if (isIncoming) {
-          console.log('⏰ Call timeout');
-          rejectCall();
-        }
+        console.log('⏰ Call timeout');
+        rejectCall();
       }, CALL_TIMEOUT);
     });
 
@@ -268,14 +309,13 @@ const useCallManager = (userId, partnerId) => {
     });
 
     socketService.socket?.on('reconnect', () => {
-      if (isCallActive && callStateRef.current) {
+      if (callStateRef.current) {
         console.log('🔄 Network reconnected');
         reconnectCall();
       }
     });
-  }, [processIceCandidateQueue]);
+  }, [processIceCandidateQueue, rejectCall, endCall, reconnectCall]);
 
-  // Start call
   const startCall = useCallback(async (type) => {
     if (!partnerId || isCallActive) return;
 
@@ -322,7 +362,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [partnerId, userId, isCallActive, getUserMedia, setupPeerConnection, ICE_SERVERS, cleanup]);
 
-  // Accept call
   const acceptCall = useCallback(async () => {
     const data = incomingCallDataRef.current;
     if (!data) return;
@@ -377,60 +416,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [getUserMedia, setupPeerConnection, processIceCandidateQueue, cleanup, ICE_SERVERS]);
 
-  // Reject call
-  const rejectCall = useCallback(() => {
-    console.log('📞 Rejecting call');
-    cleanup();
-    
-    if (incomingCallDataRef.current) {
-      socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
-    }
-    
-    setIsIncoming(false);
-    setCallType(null);
-    setCallerName('');
-    incomingCallDataRef.current = null;
-  }, [cleanup]);
-
-  // End call
-  const endCall = useCallback(() => {
-    console.log('📞 Ending call');
-    cleanup();
-    
-    isOfferSentRef.current = false;
-    isAnswerSentRef.current = false;
-    reconnectAttemptRef.current = 0;
-    callStateRef.current = null;
-    
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-
-    if (localVideoRef.current) localVideoRef.current.srcObject = null;
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
-    if (localAudioRef.current) localAudioRef.current.srcObject = null;
-    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
-
-    if (isCallActive && partnerId) {
-      socketService.sendCallEnd({ to: partnerId });
-    }
-
-    setIsCallActive(false);
-    setIsIncoming(false);
-    setCallType(null);
-    setIsVideoEnabled(true);
-    setIsAudioEnabled(true);
-    setCallQuality('good');
-    incomingCallDataRef.current = null;
-  }, [isCallActive, partnerId, cleanup]);
-
-  // Toggle video
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
@@ -441,7 +426,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
-  // Toggle audio
   const toggleAudio = useCallback(() => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -452,7 +436,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
-  // Toggle speaker
   const toggleSpeaker = useCallback(() => {
     if (remoteAudioRef.current) {
       const newState = !isSpeakerOn;
@@ -467,7 +450,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [isSpeakerOn]);
 
-  // Switch camera
   const switchCamera = useCallback(async () => {
     if (!localStreamRef.current || callType !== 'video') return;
     
@@ -501,7 +483,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [isFrontCamera, callType]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanup();
