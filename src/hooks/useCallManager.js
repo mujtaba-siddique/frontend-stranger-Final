@@ -37,7 +37,6 @@ const useCallManager = (userId, partnerId) => {
   ], []);
 
   const CALL_TIMEOUT = 30000;
-  const MAX_RECONNECT_ATTEMPTS = 3;
 
   const cleanup = useCallback(() => {
     if (callTimeoutRef.current) {
