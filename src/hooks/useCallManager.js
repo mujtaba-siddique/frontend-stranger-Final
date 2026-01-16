@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import socketService from '../services/socketService';
 
 const useCallManager = (userId, partnerId) => {
@@ -10,6 +10,7 @@ const useCallManager = (userId, partnerId) => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [isFrontCamera, setIsFrontCamera] = useState(true);
+  const [callQuality, setCallQuality] = useState('good');
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -23,371 +24,402 @@ const useCallManager = (userId, partnerId) => {
   const reconnectAttemptRef = useRef(0);
   const callStateRef = useRef(null);
   const listenersInitializedRef = useRef(false);
+  const iceCandidateQueueRef = useRef([]);
+  const callTimeoutRef = useRef(null);
+  const qualityCheckIntervalRef = useRef(null);
 
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
   ];
 
-  // Reconnect call after network issue
-  const reconnectCall = useCallback(async () => {
-    if (!callStateRef.current || reconnectAttemptRef.current >= 3) return;
-    
-    console.log('🔄 Attempting to reconnect call...');
-    reconnectAttemptRef.current++;
-    
-    try {
-      const { type, isInitiator } = callStateRef.current;
-      
-      if (isInitiator) {
-        await startCall(type);
+  const CALL_TIMEOUT = 30000;
+  const MAX_RECONNECT_ATTEMPTS = 3;
+
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+    if (qualityCheckIntervalRef.current) {
+      clearInterval(qualityCheckIntervalRef.current);
+      qualityCheckIntervalRef.current = null;
+    }
+    iceCandidateQueueRef.current = [];
+  }, []);
+
+  // Monitor call quality
+  const monitorCallQuality = useCallback(() => {
+    if (!peerConnectionRef.current) return;
+
+    qualityCheckIntervalRef.current = setInterval(async () => {
+      try {
+        const stats = await peerConnectionRef.current.getStats();
+        let packetsLost = 0;
+        let packetsReceived = 0;
+
+        stats.forEach(report => {
+          if (report.type === 'inbound-rtp') {
+            packetsLost += report.packetsLost || 0;
+            packetsReceived += report.packetsReceived || 0;
+          }
+        });
+
+        const lossRate = packetsReceived > 0 ? (packetsLost / packetsReceived) * 100 : 0;
+        
+        if (lossRate > 10) setCallQuality('poor');
+        else if (lossRate > 5) setCallQuality('fair');
+        else setCallQuality('good');
+      } catch (err) {
+        console.error('Quality check error:', err);
       }
-    } catch (error) {
-      console.error('❌ Reconnect failed:', error);
-      if (reconnectAttemptRef.current < 3) {
-        setTimeout(() => reconnectCall(), 2000);
-      } else {
-        endCall();
+    }, 3000);
+  }, []);
+
+  // Process queued ICE candidates
+  const processIceCandidateQueue = useCallback(async () => {
+    if (!peerConnectionRef.current || peerConnectionRef.current.remoteDescription === null) return;
+
+    while (iceCandidateQueueRef.current.length > 0) {
+      const candidate = iceCandidateQueueRef.current.shift();
+      try {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        console.log('✅ Queued ICE candidate added');
+      } catch (err) {
+        console.error('❌ Error adding queued ICE candidate:', err);
       }
     }
   }, []);
 
-  // Initialize call listeners
-  const initializeCallListeners = useCallback(() => {
-    if (listenersInitializedRef.current) {
-      console.log('⚠️ Listeners already initialized, skipping...');
+  // ICE restart for reconnection
+  const iceRestart = useCallback(async () => {
+    if (!peerConnectionRef.current || !callStateRef.current) return;
+
+    try {
+      const { isInitiator } = callStateRef.current;
+      
+      if (isInitiator) {
+        const offer = await peerConnectionRef.current.createOffer({ iceRestart: true });
+        await peerConnectionRef.current.setLocalDescription(offer);
+        
+        socketService.sendCallOffer({
+          offer: offer,
+          to: partnerId,
+          from: userId,
+          callType: callStateRef.current.type,
+          isRestart: true
+        });
+      }
+    } catch (err) {
+      console.error('❌ ICE restart failed:', err);
+    }
+  }, [partnerId, userId]);
+
+  // Reconnect call
+  const reconnectCall = useCallback(async () => {
+    if (!callStateRef.current || reconnectAttemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
+      console.log('❌ Max reconnect attempts reached');
       return;
     }
     
-    console.log('🔧 Initializing call listeners (ONCE)...');
+    console.log('🔄 Reconnect attempt:', reconnectAttemptRef.current + 1);
+    reconnectAttemptRef.current++;
+    
+    await iceRestart();
+  }, [iceRestart]);
+
+  // Get user media with constraints
+  const getUserMedia = useCallback(async (type) => {
+    const constraints = {
+      video: type === 'video' ? {
+        facingMode: 'user',
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      } : false,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    };
+
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      if (err.name === 'NotAllowedError') {
+        throw new Error('Camera/microphone permission denied');
+      } else if (err.name === 'NotFoundError') {
+        throw new Error('No camera/microphone found');
+      }
+      throw err;
+    }
+  }, []);
+
+  // Setup peer connection handlers
+  const setupPeerConnection = useCallback((pc, isInitiator, targetId) => {
+    pc.ontrack = (event) => {
+      console.log('📞 Remote track:', event.track.kind);
+      const remoteStream = event.streams[0];
+      
+      if (event.track.kind === 'video' && remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      } else if (event.track.kind === 'audio' && remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = remoteStream;
+        remoteAudioRef.current.volume = 1.0;
+      }
+    };
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socketService.sendIceCandidate({
+          candidate: event.candidate,
+          to: targetId
+        });
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('📞 Connection state:', pc.connectionState);
+      
+      if (pc.connectionState === 'connected') {
+        reconnectAttemptRef.current = 0;
+        monitorCallQuality();
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        console.log('⚠️ Connection lost');
+        setTimeout(() => reconnectCall(), 1000);
+      }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log('🧊 ICE gathering state:', pc.iceGatheringState);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE connection state:', pc.iceConnectionState);
+    };
+  }, [monitorCallQuality, reconnectCall]);
+
+  // Initialize listeners
+  const initializeCallListeners = useCallback(() => {
+    if (listenersInitializedRef.current) return;
+    
+    console.log('🔧 Initializing call listeners');
     listenersInitializedRef.current = true;
     
-    // Listen for incoming calls
     socketService.onCallOffer(async (data) => {
-      console.log('📞 Incoming call offer:', data);
+      console.log('📞 Incoming call offer');
       
       incomingCallDataRef.current = data;
       setCallerName('Anonymous Stranger');
       setCallType(data.callType);
       setIsIncoming(true);
+
+      callTimeoutRef.current = setTimeout(() => {
+        if (isIncoming) {
+          console.log('⏰ Call timeout');
+          rejectCall();
+        }
+      }, CALL_TIMEOUT);
     });
 
-    // Listen for network reconnection during call
-    socketService.socket?.on('reconnect', () => {
-      if (isCallActive && callStateRef.current) {
-        console.log('🔄 Network reconnected during call');
-        reconnectCall();
-      }
-    });
-
-  // Listen for call answers
     socketService.onCallAnswer(async (data) => {
       console.log('📞 Call answer received');
-      if (peerConnectionRef.current) {
-        const currentState = peerConnectionRef.current.signalingState;
-        console.log('Current signaling state:', currentState);
-        
-        if (currentState === 'stable') {
-          console.log('⚠️ Already in stable state, ignoring duplicate answer');
-          return;
-        }
-        
-        if (currentState === 'have-local-offer' && !isAnswerSentRef.current) {
-          try {
-            await peerConnectionRef.current.setRemoteDescription(
-              new RTCSessionDescription(data.answer)
-            );
-            isAnswerSentRef.current = true;
-            console.log('✅ Answer set successfully');
-          } catch (error) {
-            console.error('❌ Error setting remote description:', error);
-          }
+      if (!peerConnectionRef.current) return;
+
+      const state = peerConnectionRef.current.signalingState;
+      
+      if (state === 'stable') {
+        console.log('⚠️ Already stable, ignoring');
+        return;
+      }
+      
+      if (state === 'have-local-offer') {
+        try {
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          await processIceCandidateQueue();
+          console.log('✅ Answer set');
+        } catch (err) {
+          console.error('❌ Error setting answer:', err);
         }
       }
     });
 
-    // Listen for ICE candidates
     socketService.onIceCandidate(async (data) => {
-      console.log('📞 ICE candidate received:', data);
-      if (peerConnectionRef.current && data.candidate) {
-        await peerConnectionRef.current.addIceCandidate(
-          new RTCIceCandidate(data.candidate)
-        );
+      if (!peerConnectionRef.current || !data.candidate) return;
+
+      if (peerConnectionRef.current.remoteDescription === null) {
+        console.log('📦 Queueing ICE candidate');
+        iceCandidateQueueRef.current.push(data.candidate);
+      } else {
+        try {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+          console.log('✅ ICE candidate added');
+        } catch (err) {
+          console.error('❌ Error adding ICE candidate:', err);
+        }
       }
     });
 
-    // Listen for call end
     socketService.onCallEnded(() => {
       console.log('📞 Call ended by partner');
       endCall();
     });
-  }, []);
 
-  // Start a call (video or audio)
+    socketService.socket?.on('reconnect', () => {
+      if (isCallActive && callStateRef.current) {
+        console.log('🔄 Network reconnected');
+        reconnectCall();
+      }
+    });
+  }, [processIceCandidateQueue]);
+
+  // Start call
   const startCall = useCallback(async (type) => {
-    if (!partnerId || isCallActive) {
-      console.error('Cannot start call - no partner or call already active');
-      return;
-    }
+    if (!partnerId || isCallActive) return;
 
-    console.log(`📞 Starting ${type} call with partner:`, partnerId);
+    console.log(`📞 Starting ${type} call`);
     
     try {
-      // Reset flags
       isOfferSentRef.current = false;
       isAnswerSentRef.current = false;
       reconnectAttemptRef.current = 0;
-      
-      // Save call state for reconnection
       callStateRef.current = { type, isInitiator: true };
       
       setCallType(type);
       setIsCallActive(true);
 
-      // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video' ? { facingMode: 'user' } : false,
-        audio: true
-      });
-
+      const stream = await getUserMedia(type);
       localStreamRef.current = stream;
 
       if (localVideoRef.current && type === 'video') {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       peerConnectionRef.current = pc;
 
-      // Add local stream to peer connection
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      setupPeerConnection(pc, true, partnerId);
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      socketService.sendCallOffer({
+        offer: offer,
+        to: partnerId,
+        from: userId,
+        callType: type
       });
-
-      // Handle remote stream
-      pc.ontrack = (event) => {
-        console.log('📞 Remote track received:', event.track.kind, 'for', type, 'call');
-        const remoteStream = event.streams[0];
-        
-        if (event.track.kind === 'video' && remoteVideoRef.current) {
-          console.log('📹 Setting remote video stream');
-          remoteVideoRef.current.srcObject = remoteStream;
-        } else if (event.track.kind === 'audio' && remoteAudioRef.current) {
-          console.log('🔊 Setting remote audio stream');
-          remoteAudioRef.current.srcObject = remoteStream;
-          remoteAudioRef.current.volume = 1.0;
-        }
-      };
-
-      // Handle ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log('📞 Sending ICE candidate');
-          socketService.sendIceCandidate({
-            candidate: event.candidate,
-            to: partnerId
-          });
-        }
-      };
-
-      // Handle connection state changes
-      pc.onconnectionstatechange = () => {
-        console.log('📞 Connection state:', pc.connectionState);
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          console.log('⚠️ Call connection lost, attempting reconnect...');
-          setTimeout(() => reconnectCall(), 1000);
-        } else if (pc.connectionState === 'connected') {
-          reconnectAttemptRef.current = 0;
-        }
-      };
-
-      // Create and send offer only once
-      if (!isOfferSentRef.current) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        isOfferSentRef.current = true;
-
-        console.log('📞 Sending call offer');
-        socketService.sendCallOffer({
-          offer: offer,
-          to: partnerId,
-          from: userId,
-          callType: type
-        });
-      }
 
     } catch (error) {
       console.error('📞 Error starting call:', error);
-      alert('Could not access camera/microphone');
+      alert(error.message || 'Could not access camera/microphone');
       endCall();
     }
-  }, [partnerId, userId, isCallActive]);
+  }, [partnerId, userId, isCallActive, getUserMedia, setupPeerConnection]);
 
-  // Accept incoming call
+  // Accept call
   const acceptCall = useCallback(async () => {
     const data = incomingCallDataRef.current;
-    if (!data || isAnswerSentRef.current) return;
+    if (!data) return;
 
     console.log('📞 Accepting call');
+    cleanup();
     
     try {
       setIsIncoming(false);
       setIsCallActive(true);
       
-      // Reset flags
       isOfferSentRef.current = false;
       isAnswerSentRef.current = false;
       reconnectAttemptRef.current = 0;
-      
-      // Save call state for reconnection
       callStateRef.current = { type: data.callType, isInitiator: false };
 
-      // Get user media
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: data.callType === 'video' ? { facingMode: 'user' } : false,
-        audio: true
-      });
-
+      const stream = await getUserMedia(data.callType);
       localStreamRef.current = stream;
 
       if (localVideoRef.current && data.callType === 'video') {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Create peer connection
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       peerConnectionRef.current = pc;
 
-      // Add local stream
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
+      stream.getTracks().forEach(track => pc.addTrack(track, stream));
+      setupPeerConnection(pc, false, data.from);
+
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      await processIceCandidateQueue();
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      socketService.sendCallAnswer({
+        answer: answer,
+        to: data.from
       });
-
-      // Handle remote stream
-      pc.ontrack = (event) => {
-        console.log('📞 Remote stream received for', data.callType, 'call');
-        const remoteStream = event.streams[0];
-        
-        if (data.callType === 'video' && remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = remoteStream;
-        } else if (data.callType === 'audio' && remoteAudioRef.current) {
-          console.log('🔊 Setting remote audio stream');
-          remoteAudioRef.current.srcObject = remoteStream;
-          remoteAudioRef.current.volume = 1.0;
-        }
-      };
-
-      // Handle ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          console.log('📞 Sending ICE candidate');
-          socketService.sendIceCandidate({
-            candidate: event.candidate,
-            to: data.from
-          });
-        }
-      };
-
-      // Handle connection state changes
-      pc.onconnectionstatechange = () => {
-        console.log('📞 Connection state:', pc.connectionState);
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-          console.log('⚠️ Call connection lost, attempting reconnect...');
-          setTimeout(() => reconnectCall(), 1000);
-        } else if (pc.connectionState === 'connected') {
-          reconnectAttemptRef.current = 0;
-        }
-      };
-
-      // Set remote description and create answer only once
-      if (!isAnswerSentRef.current) {
-        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        isAnswerSentRef.current = true;
-
-        console.log('📞 Sending call answer');
-        socketService.sendCallAnswer({
-          answer: answer,
-          to: data.from
-        });
-      }
 
     } catch (error) {
       console.error('📞 Error accepting call:', error);
-      alert('Could not access camera/microphone');
+      alert(error.message || 'Could not access camera/microphone');
       rejectCall();
     }
-  }, []);
+  }, [getUserMedia, setupPeerConnection, processIceCandidateQueue, cleanup]);
 
-  // Reject incoming call
+  // Reject call
   const rejectCall = useCallback(() => {
     console.log('📞 Rejecting call');
+    cleanup();
     
     if (incomingCallDataRef.current) {
-      socketService.sendCallEnd({
-        to: incomingCallDataRef.current.from
-      });
+      socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
     }
     
     setIsIncoming(false);
     setCallType(null);
     setCallerName('');
     incomingCallDataRef.current = null;
-  }, []);
+  }, [cleanup]);
 
-  // End active call
+  // End call
   const endCall = useCallback(() => {
     console.log('📞 Ending call');
+    cleanup();
     
-    // Reset flags
     isOfferSentRef.current = false;
     isAnswerSentRef.current = false;
     reconnectAttemptRef.current = 0;
     callStateRef.current = null;
     
-    // Close peer connection
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
 
-    // Stop local stream
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
       localStreamRef.current = null;
     }
 
-    // Clear audio/video elements
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-    if (localAudioRef.current) {
-      localAudioRef.current.srcObject = null;
-    }
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (localAudioRef.current) localAudioRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
 
-    // Notify partner if call was active
     if (isCallActive && partnerId) {
-      socketService.sendCallEnd({
-        to: partnerId
-      });
+      socketService.sendCallEnd({ to: partnerId });
     }
 
-    // Reset state
     setIsCallActive(false);
     setIsIncoming(false);
     setCallType(null);
     setIsVideoEnabled(true);
     setIsAudioEnabled(true);
+    setCallQuality('good');
     incomingCallDataRef.current = null;
-  }, [isCallActive, partnerId]);
+  }, [isCallActive, partnerId, cleanup]);
 
   // Toggle video
   const toggleVideo = useCallback(() => {
@@ -411,38 +443,30 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
-  // Toggle speaker (earpiece/speaker)
+  // Toggle speaker
   const toggleSpeaker = useCallback(() => {
     if (remoteAudioRef.current) {
-      const newSpeakerState = !isSpeakerOn;
-      setIsSpeakerOn(newSpeakerState);
+      const newState = !isSpeakerOn;
+      setIsSpeakerOn(newState);
       
-      // Set audio output
       if (remoteAudioRef.current.setSinkId) {
-        remoteAudioRef.current.setSinkId(newSpeakerState ? 'default' : 'communications')
-          .catch(err => console.log('Speaker toggle error:', err));
+        remoteAudioRef.current.setSinkId(newState ? 'default' : 'communications')
+          .catch(err => console.log('Speaker error:', err));
       }
       
-      // Adjust volume for speaker mode
-      remoteAudioRef.current.volume = newSpeakerState ? 1.0 : 0.8;
-      console.log(`🔊 Speaker ${newSpeakerState ? 'ON' : 'OFF (Earpiece)'}`);
+      remoteAudioRef.current.volume = newState ? 1.0 : 0.8;
     }
   }, [isSpeakerOn]);
 
-  // Switch camera (front/back)
+  // Switch camera
   const switchCamera = useCallback(async () => {
     if (!localStreamRef.current || callType !== 'video') return;
     
     try {
       const newFacingMode = isFrontCamera ? 'environment' : 'user';
-      
-      // Stop current video track
       const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.stop();
-      }
+      if (videoTrack) videoTrack.stop();
       
-      // Get new stream with switched camera
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: newFacingMode },
         audio: false
@@ -450,32 +474,38 @@ const useCallManager = (userId, partnerId) => {
       
       const newVideoTrack = newStream.getVideoTracks()[0];
       
-      // Replace track in peer connection
       if (peerConnectionRef.current) {
         const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(newVideoTrack);
-        }
+        if (sender) await sender.replaceTrack(newVideoTrack);
       }
       
-      // Update local stream
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       localStreamRef.current = new MediaStream([newVideoTrack, audioTrack]);
       
-      // Update local video element
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current;
       }
       
       setIsFrontCamera(!isFrontCamera);
-      console.log(`📷 Switched to ${newFacingMode === 'user' ? 'front' : 'back'} camera`);
     } catch (error) {
       console.error('❌ Camera switch failed:', error);
     }
   }, [isFrontCamera, callType]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [cleanup]);
+
   return {
-    // State
     isCallActive,
     callType,
     isIncoming,
@@ -484,14 +514,11 @@ const useCallManager = (userId, partnerId) => {
     isAudioEnabled,
     isSpeakerOn,
     isFrontCamera,
-    
-    // Refs
+    callQuality,
     localVideoRef,
     remoteVideoRef,
     localAudioRef,
     remoteAudioRef,
-    
-    // Actions
     initializeCallListeners,
     startCall,
     acceptCall,

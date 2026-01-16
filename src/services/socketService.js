@@ -251,6 +251,8 @@ class SocketService {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call offer:', data);
       this.socket.emit('call-offer', data);
+    } else {
+      console.error('❌ Cannot send call offer - not connected');
     }
   }
 
@@ -258,12 +260,13 @@ class SocketService {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call answer:', data);
       this.socket.emit('call-answer', data);
+    } else {
+      console.error('❌ Cannot send call answer - not connected');
     }
   }
 
   sendIceCandidate(data) {
     if (this.socket && this.isConnected) {
-      console.log('📞 Sending ICE candidate:', data);
       this.socket.emit('ice-candidate', data);
     }
   }
@@ -272,6 +275,13 @@ class SocketService {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call end:', data);
       this.socket.emit('call-end', data);
+    }
+  }
+
+  sendCallReconnect(data) {
+    if (this.socket && this.isConnected) {
+      console.log('🔄 Sending call reconnect:', data);
+      this.socket.emit('call-reconnect', data);
     }
   }
 
@@ -305,6 +315,18 @@ class SocketService {
     }
   }
 
+  onCallReconnect(callback) {
+    if (this.socket) {
+      this.socket.on('call-reconnect', callback);
+    }
+  }
+
+  onCallTimeout(callback) {
+    if (this.socket) {
+      this.socket.on('call-timeout', callback);
+    }
+  }
+
   removeAllListeners() {
     if (this.socket) {
       console.log('🧽 Removing all socket listeners');
@@ -321,7 +343,7 @@ class SocketService {
         'message-seen-by-partner', 'enable-end-chat', 'session-timeout', 
         'inactivity-warning', 'call-offer', 'call-answer', 'ice-candidate', 
         'call-ended', 'call-failed', 'partner-reconnected', 'partner-connection-lost',
-        'call-connection-lost', 'call-reconnect-needed'
+        'call-connection-lost', 'call-reconnect-needed', 'call-reconnect', 'call-timeout'
       ];
       
       events.forEach(event => {

@@ -42,7 +42,8 @@ const VideoCallComponent = ({
   localAudioRef,
   remoteAudioRef,
   darkMode,
-  isReconnecting = false
+  isReconnecting = false,
+  callQuality = 'good'
 }) => {
   const [callDuration, setCallDuration] = useState(0);
   const callStartTime = useRef(null);
@@ -176,9 +177,20 @@ const VideoCallComponent = ({
             <Typography variant="h6" sx={{ color: 'white', fontWeight: 'bold', fontSize: '1rem' }}>
               Anonymous Stranger
             </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
-              {isReconnecting ? '🔄 Reconnecting...' : formatDuration(callDuration)}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
+                {isReconnecting ? '🔄 Reconnecting...' : formatDuration(callDuration)}
+              </Typography>
+              {callQuality !== 'good' && (
+                <Typography variant="caption" sx={{ 
+                  color: callQuality === 'poor' ? '#ff4757' : '#ffa502',
+                  fontSize: '0.7rem',
+                  ml: 1
+                }}>
+                  {callQuality === 'poor' ? '⚠️ Poor' : '⚠️ Fair'}
+                </Typography>
+              )}
+            </Box>
           </Box>
           
           {/* Call Controls */}
