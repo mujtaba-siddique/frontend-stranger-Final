@@ -92,41 +92,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
-  const iceRestart = useCallback(async () => {
-    if (!peerConnectionRef.current || !callStateRef.current) return;
-
-    try {
-      const { isInitiator } = callStateRef.current;
-      
-      if (isInitiator) {
-        const offer = await peerConnectionRef.current.createOffer({ iceRestart: true });
-        await peerConnectionRef.current.setLocalDescription(offer);
-        
-        socketService.sendCallOffer({
-          offer: offer,
-          to: partnerId,
-          from: userId,
-          callType: callStateRef.current.type,
-          isRestart: true
-        });
-      }
-    } catch (err) {
-      console.error('❌ ICE restart failed:', err);
-    }
-  }, [partnerId, userId]);
-
-  const reconnectCall = useCallback(async () => {
-    if (!callStateRef.current || reconnectAttemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
-      console.log('❌ Max reconnect attempts reached');
-      return;
-    }
-    
-    console.log('🔄 Reconnect attempt:', reconnectAttemptRef.current + 1);
-    reconnectAttemptRef.current++;
-    
-    await iceRestart();
-  }, [iceRestart]);
-
   const getUserMedia = useCallback(async (type) => {
     const constraints = {
       video: type === 'video' ? {
