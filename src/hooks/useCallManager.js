@@ -187,15 +187,22 @@ const useCallManager = (userId, partnerId) => {
     };
 
     pc.oniceconnectionstatechange = () => {
-      console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      const state = pc.iceConnectionState;
+      console.log('🧊 ICE connection state:', state);
       
-      if (pc.iceConnectionState === 'failed') {
-        console.log('⚠️ ICE connection failed, attempting restart');
+      if (state === 'disconnected') {
+        console.log('⚠️ ICE disconnected, waiting for recovery...');
         setTimeout(() => {
-          if (callStateRef.current) {
+          if (peerConnectionRef.current && peerConnectionRef.current.iceConnectionState === 'disconnected' && callStateRef.current) {
+            console.log('🔄 Attempting ICE restart after disconnect');
             reconnectCall();
           }
-        }, 2000);
+        }, 5000);
+      } else if (state === 'failed') {
+        console.log('❌ ICE failed, attempting restart');
+        if (callStateRef.current) {
+          reconnectCall();
+        }
       }
     };
   }, [monitorCallQuality, reconnectCall]);
@@ -315,16 +322,9 @@ const useCallManager = (userId, partnerId) => {
     });
 
     socketService.socket?.on('reconnect', () => {
-      if (callStateRef.current) {
-        console.log('🔄 Network reconnected, attempting call reconnect');
-        setTimeout(() => {
-          if (callStateRef.current) {
-            reconnectCall();
-          }
-        }, 1000);
-      }
+      console.log('🔄 Socket reconnected');
     });
-  }, [processIceCandidateQueue, rejectCall, endCall, reconnectCall]);
+  }, [processIceCandidateQueue, rejectCall, endCall]);
 
   const startCall = useCallback(async (type) => {
     if (!partnerId || isCallActive) return;
