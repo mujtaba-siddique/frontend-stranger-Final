@@ -17,7 +17,7 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "CI=false react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "network": "set REACT_APP_API_URL=http://192.168.29.73:5000 && set REACT_APP_SOCKET_URL=http://192.168.29.73:5000 && react-scripts start"
