@@ -19,7 +19,14 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
       console.log('📤 MESSAGE INPUT: Submitting message:', message);
       onSendMessage(message);
       setMessage('');
-      handleStopTyping();
+      if (isTyping && onTypingStop) {
+        setIsTyping(false);
+        onTypingStop();
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
     } else {
       console.log('❌ MESSAGE INPUT: Cannot submit - disabled or not connected');
     }
@@ -39,22 +46,20 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
     
     // Auto-stop after 1 second of no keystrokes
     typingTimeoutRef.current = setTimeout(() => {
-      handleStopTyping();
+      if (isTyping && onTypingStop) {
+        console.log('✋ MESSAGE INPUT: User stopped typing');
+        setIsTyping(false);
+        onTypingStop();
+      }
+      
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
     }, 1000);
-  }, [isTyping, onTypingStart, isConnected]);
+  }, [isTyping, onTypingStart, onTypingStop, isConnected]);
 
-  const handleStopTyping = () => {
-    if (isTyping && onTypingStop) {
-      console.log('✋ MESSAGE INPUT: User stopped typing');
-      setIsTyping(false);
-      onTypingStop();
-    }
-    
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = null;
-    }
-  };
+
 
   const handleChange = (e) => {
     const newValue = e.target.value;
@@ -65,7 +70,14 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
       if (newValue.length > 0) {
         handleStartTyping();
       } else {
-        handleStopTyping();
+        if (isTyping && onTypingStop) {
+          setIsTyping(false);
+          onTypingStop();
+        }
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = null;
+        }
       }
     }
   };
@@ -82,7 +94,14 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
   
   // Stop typing when user leaves input
   const handleBlur = () => {
-    handleStopTyping();
+    if (isTyping && onTypingStop) {
+      setIsTyping(false);
+      onTypingStop();
+    }
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
   };
 
   const handleKeyPress = (e) => {

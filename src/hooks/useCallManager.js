@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import socketService from '../services/socketService';
 
 const useCallManager = (userId, partnerId) => {
@@ -28,11 +28,11 @@ const useCallManager = (userId, partnerId) => {
   const callTimeoutRef = useRef(null);
   const qualityCheckIntervalRef = useRef(null);
 
-  const ICE_SERVERS = [
+  const ICE_SERVERS = useMemo(() => [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' }
-  ];
+  ], []);
 
   const CALL_TIMEOUT = 30000;
   const MAX_RECONNECT_ATTEMPTS = 3;
@@ -316,9 +316,11 @@ const useCallManager = (userId, partnerId) => {
     } catch (error) {
       console.error('📞 Error starting call:', error);
       alert(error.message || 'Could not access camera/microphone');
-      endCall();
+      cleanup();
+      setIsCallActive(false);
+      setCallType(null);
     }
-  }, [partnerId, userId, isCallActive, getUserMedia, setupPeerConnection]);
+  }, [partnerId, userId, isCallActive, getUserMedia, setupPeerConnection, ICE_SERVERS, cleanup]);
 
   // Accept call
   const acceptCall = useCallback(async () => {
@@ -364,9 +366,16 @@ const useCallManager = (userId, partnerId) => {
     } catch (error) {
       console.error('📞 Error accepting call:', error);
       alert(error.message || 'Could not access camera/microphone');
-      rejectCall();
+      cleanup();
+      if (incomingCallDataRef.current) {
+        socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
+      }
+      setIsIncoming(false);
+      setCallType(null);
+      setCallerName('');
+      incomingCallDataRef.current = null;
     }
-  }, [getUserMedia, setupPeerConnection, processIceCandidateQueue, cleanup]);
+  }, [getUserMedia, setupPeerConnection, processIceCandidateQueue, cleanup, ICE_SERVERS]);
 
   // Reject call
   const rejectCall = useCallback(() => {

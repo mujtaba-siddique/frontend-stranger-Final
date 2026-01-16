@@ -41,7 +41,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [userId, setUserId] = useState(null);
   const [partnerId, setPartnerId] = useState(null);
-  const [sessionId, setSessionId] = useState(null);
+  const [, setSessionId] = useState(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
   const [userProfile, setUserProfile] = useState(null);
@@ -293,10 +293,7 @@ function App() {
     setSessionId(null);
   };
 
-  const handleRetry = () => {
-    handleDisconnect();
-    setTimeout(handleConnect, 1000);
-  };
+
   
   const handleSessionTimeoutClose = () => {
     setSessionTimeoutOpen(false);

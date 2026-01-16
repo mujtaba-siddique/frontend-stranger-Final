@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -6,10 +6,9 @@ import {
   Alert,
   Avatar,
   Badge,
-  IconButton,
-  Snackbar
+  IconButton
 } from '@mui/material';
-import { ExitToApp, Settings, LightMode, DarkMode, Videocam, Phone } from '@mui/icons-material';
+import { ExitToApp, LightMode, DarkMode, Videocam, Phone } from '@mui/icons-material';
 import MessageInput from './MessageInput';
 import MessageStatus from './MessageStatus';
 import TypingIndicator from './TypingIndicator';
