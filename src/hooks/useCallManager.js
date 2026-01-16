@@ -8,6 +8,8 @@ const useCallManager = (userId, partnerId) => {
   const [callerName, setCallerName] = useState('');
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [isFrontCamera, setIsFrontCamera] = useState(true);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -18,11 +20,36 @@ const useCallManager = (userId, partnerId) => {
   const incomingCallDataRef = useRef(null);
   const isOfferSentRef = useRef(false);
   const isAnswerSentRef = useRef(false);
+  const reconnectAttemptRef = useRef(0);
+  const callStateRef = useRef(null);
 
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' }
   ];
+
+  // Reconnect call after network issue
+  const reconnectCall = useCallback(async () => {
+    if (!callStateRef.current || reconnectAttemptRef.current >= 3) return;
+    
+    console.log('🔄 Attempting to reconnect call...');
+    reconnectAttemptRef.current++;
+    
+    try {
+      const { type, isInitiator } = callStateRef.current;
+      
+      if (isInitiator) {
+        await startCall(type);
+      }
+    } catch (error) {
+      console.error('❌ Reconnect failed:', error);
+      if (reconnectAttemptRef.current < 3) {
+        setTimeout(() => reconnectCall(), 2000);
+      } else {
+        endCall();
+      }
+    }
+  }, []);
 
   // Initialize call listeners
   const initializeCallListeners = useCallback(() => {
@@ -33,6 +60,14 @@ const useCallManager = (userId, partnerId) => {
       setCallerName('Anonymous Stranger');
       setCallType(data.callType);
       setIsIncoming(true);
+    });
+
+    // Listen for network reconnection during call
+    socketService.socket?.on('reconnect', () => {
+      if (isCallActive && callStateRef.current) {
+        console.log('🔄 Network reconnected during call');
+        reconnectCall();
+      }
     });
 
   // Listen for call answers
@@ -83,13 +118,17 @@ const useCallManager = (userId, partnerId) => {
       // Reset flags
       isOfferSentRef.current = false;
       isAnswerSentRef.current = false;
+      reconnectAttemptRef.current = 0;
+      
+      // Save call state for reconnection
+      callStateRef.current = { type, isInitiator: true };
       
       setCallType(type);
       setIsCallActive(true);
 
       // Get user media
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: type === 'video',
+        video: type === 'video' ? { facingMode: 'user' } : false,
         audio: true
       });
 
@@ -133,6 +172,17 @@ const useCallManager = (userId, partnerId) => {
         }
       };
 
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log('📞 Connection state:', pc.connectionState);
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          console.log('⚠️ Call connection lost, attempting reconnect...');
+          setTimeout(() => reconnectCall(), 1000);
+        } else if (pc.connectionState === 'connected') {
+          reconnectAttemptRef.current = 0;
+        }
+      };
+
       // Create and send offer only once
       if (!isOfferSentRef.current) {
         const offer = await pc.createOffer();
@@ -169,10 +219,14 @@ const useCallManager = (userId, partnerId) => {
       // Reset flags
       isOfferSentRef.current = false;
       isAnswerSentRef.current = false;
+      reconnectAttemptRef.current = 0;
+      
+      // Save call state for reconnection
+      callStateRef.current = { type: data.callType, isInitiator: false };
 
       // Get user media
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: data.callType === 'video',
+        video: data.callType === 'video' ? { facingMode: 'user' } : false,
         audio: true
       });
 
@@ -213,6 +267,17 @@ const useCallManager = (userId, partnerId) => {
             candidate: event.candidate,
             to: data.from
           });
+        }
+      };
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log('📞 Connection state:', pc.connectionState);
+        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+          console.log('⚠️ Call connection lost, attempting reconnect...');
+          setTimeout(() => reconnectCall(), 1000);
+        } else if (pc.connectionState === 'connected') {
+          reconnectAttemptRef.current = 0;
         }
       };
 
@@ -258,6 +323,8 @@ const useCallManager = (userId, partnerId) => {
     // Reset flags
     isOfferSentRef.current = false;
     isAnswerSentRef.current = false;
+    reconnectAttemptRef.current = 0;
+    callStateRef.current = null;
     
     // Close peer connection
     if (peerConnectionRef.current) {
@@ -323,6 +390,107 @@ const useCallManager = (userId, partnerId) => {
     }
   }, []);
 
+  // Toggle speaker (earpiece/speaker)
+  const toggleSpeaker = useCallback(() => {
+    if (remoteAudioRef.current) {
+      const newSpeakerState = !isSpeakerOn;
+      setIsSpeakerOn(newSpeakerState);
+      
+      // Set audio output
+      if (remoteAudioRef.current.setSinkId) {
+        remoteAudioRef.current.setSinkId(newSpeakerState ? 'default' : 'communications')
+          .catch(err => console.log('Speaker toggle error:', err));
+      }
+      
+      // Adjust volume for speaker mode
+      remoteAudioRef.current.volume = newSpeakerState ? 1.0 : 0.8;
+      console.log(`🔊 Speaker ${newSpeakerState ? 'ON' : 'OFF (Earpiece)'}`);
+    }
+  }, [isSpeakerOn]);
+
+  // Switch camera (front/back)
+  const switchCamera = useCallback(async () => {
+    if (!localStreamRef.current || callType !== 'video') return;
+    
+    try {
+      const newFacingMode = isFrontCamera ? 'environment' : 'user';
+      
+      // Stop current video track
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.stop();
+      }
+      
+      // Get new stream with switched camera
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newFacingMode },
+        audio: false
+      });
+      
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      
+      // Replace track in peer connection
+      if (peerConnectionRef.current) {
+        const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+        }
+      }
+      
+      // Update local stream
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      localStreamRef.current = new MediaStream([newVideoTrack, audioTrack]);
+      
+      // Update local video element
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      
+      setIsFrontCamera(!isFrontCamera);
+      console.log(`📷 Switched to ${newFacingMode === 'user' ? 'front' : 'back'} camera`);
+    } catch (error) {
+      console.error('❌ Camera switch failed:', error);
+    }
+  }, [isFrontCamera, callType]);
+
+  // Upgrade audio call to video call
+  const upgradeToVideo = useCallback(async () => {
+    if (callType !== 'audio' || !peerConnectionRef.current) return;
+    
+    try {
+      console.log('📹 Upgrading to video call...');
+      
+      // Get video stream
+      const videoStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false
+      });
+      
+      const videoTrack = videoStream.getVideoTracks()[0];
+      
+      // Add video track to peer connection
+      peerConnectionRef.current.addTrack(videoTrack, localStreamRef.current);
+      
+      // Update local stream
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      localStreamRef.current = new MediaStream([videoTrack, audioTrack]);
+      
+      // Update local video element
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      
+      // Update call type
+      setCallType('video');
+      setIsVideoEnabled(true);
+      
+      console.log('✅ Upgraded to video call');
+    } catch (error) {
+      console.error('❌ Video upgrade failed:', error);
+      alert('Could not access camera');
+    }
+  }, [callType]);
+
   return {
     // State
     isCallActive,
@@ -331,6 +499,8 @@ const useCallManager = (userId, partnerId) => {
     callerName,
     isVideoEnabled,
     isAudioEnabled,
+    isSpeakerOn,
+    isFrontCamera,
     
     // Refs
     localVideoRef,
@@ -345,7 +515,10 @@ const useCallManager = (userId, partnerId) => {
     rejectCall,
     endCall,
     toggleVideo,
-    toggleAudio
+    toggleAudio,
+    toggleSpeaker,
+    switchCamera,
+    upgradeToVideo
   };
 };
 

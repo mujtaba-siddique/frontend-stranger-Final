@@ -16,7 +16,9 @@ import {
   MicOff,
   CallEnd,
   Phone,
-  VolumeUp
+  VolumeUp,
+  VolumeDown,
+  Cameraswitch
 } from '@mui/icons-material';
 
 const VideoCallComponent = ({
@@ -29,8 +31,13 @@ const VideoCallComponent = ({
   onEndCall,
   onToggleVideo,
   onToggleAudio,
+  onToggleSpeaker,
+  onSwitchCamera,
+  onUpgradeToVideo,
   isVideoEnabled,
   isAudioEnabled,
+  isSpeakerOn,
+  isFrontCamera,
   localVideoRef,
   remoteVideoRef,
   localAudioRef,
@@ -151,7 +158,7 @@ const VideoCallComponent = ({
         flexDirection: 'column',
         overflow: 'hidden'
       }}>
-        {/* Call Header */}
+        {/* Call Header with Controls */}
         <Box sx={{
           position: 'absolute',
           top: 0,
@@ -163,7 +170,7 @@ const VideoCallComponent = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          height: '60px'
+          minHeight: '70px'
         }}>
           <Box>
             <Typography variant="h6" sx={{ color: 'white', fontWeight: 'bold', fontSize: '1rem' }}>
@@ -174,16 +181,128 @@ const VideoCallComponent = ({
             </Typography>
           </Box>
           
-          <Typography variant="body2" sx={{ 
-            color: 'white',
-            background: 'rgba(255,255,255,0.2)',
-            px: 1.5,
-            py: 0.5,
-            borderRadius: 2,
-            fontSize: '0.8rem'
+          {/* Call Controls */}
+          <Box sx={{
+            display: 'flex',
+            gap: 1.5,
+            alignItems: 'center'
           }}>
-            {callType === 'video' ? 'Video Call' : 'Voice Call'}
-          </Typography>
+            {callType === 'video' && (
+              <>
+                <IconButton
+                  onClick={onToggleVideo}
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    background: isVideoEnabled 
+                      ? 'rgba(255,255,255,0.2)' 
+                      : 'rgba(255,0,0,0.8)',
+                    color: 'white',
+                    '&:hover': {
+                      background: isVideoEnabled 
+                        ? 'rgba(255,255,255,0.3)' 
+                        : 'rgba(255,0,0,0.9)',
+                      transform: 'scale(1.05)'
+                    }
+                  }}
+                >
+                  {isVideoEnabled ? <Videocam fontSize="small" /> : <VideocamOff fontSize="small" />}
+                </IconButton>
+                
+                <IconButton
+                  onClick={onSwitchCamera}
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    background: 'rgba(255,255,255,0.2)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'rgba(255,255,255,0.3)',
+                      transform: 'scale(1.05)'
+                    }
+                  }}
+                >
+                  <Cameraswitch fontSize="small" />
+                </IconButton>
+              </>
+            )}
+
+            <IconButton
+              onClick={onToggleAudio}
+              sx={{
+                width: 44,
+                height: 44,
+                background: isAudioEnabled 
+                  ? 'rgba(255,255,255,0.2)' 
+                  : 'rgba(255,0,0,0.8)',
+                color: 'white',
+                '&:hover': {
+                  background: isAudioEnabled 
+                    ? 'rgba(255,255,255,0.3)' 
+                    : 'rgba(255,0,0,0.9)',
+                  transform: 'scale(1.05)'
+                }
+              }}
+            >
+              {isAudioEnabled ? <Mic fontSize="small" /> : <MicOff fontSize="small" />}
+            </IconButton>
+
+            {callType === 'audio' && (
+              <>
+                <IconButton
+                  onClick={onToggleSpeaker}
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    background: isSpeakerOn 
+                      ? 'rgba(0,255,136,0.3)' 
+                      : 'rgba(255,255,255,0.2)',
+                    color: 'white',
+                    '&:hover': {
+                      background: isSpeakerOn 
+                        ? 'rgba(0,255,136,0.4)' 
+                        : 'rgba(255,255,255,0.3)',
+                      transform: 'scale(1.05)'
+                    }
+                  }}
+                >
+                  {isSpeakerOn ? <VolumeUp fontSize="small" /> : <VolumeDown fontSize="small" />}
+                </IconButton>
+                
+                <IconButton
+                  onClick={onUpgradeToVideo}
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #764ba2, #667eea)',
+                      transform: 'scale(1.05)'
+                    }
+                  }}
+                >
+                  <Videocam fontSize="small" />
+                </IconButton>
+              </>
+            )}
+
+            <IconButton
+              onClick={onEndCall}
+              sx={{
+                width: 44,
+                height: 44,
+                background: 'linear-gradient(135deg, #ff4757, #ff3742)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #ff3742, #ff2f3a)',
+                  transform: 'scale(1.05)'
+                }
+              }}
+            >
+              <CallEnd fontSize="small" />
+            </IconButton>
+          </Box>
         </Box>
 
         {/* Video Area */}
@@ -268,77 +387,14 @@ const VideoCallComponent = ({
                   {isAudioEnabled ? 'Microphone On' : 'Microphone Off'}
                 </Typography>
               </Box>
+              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                {isSpeakerOn ? <VolumeUp sx={{ fontSize: '1.5rem' }} /> : <VolumeDown sx={{ fontSize: '1.5rem' }} />}
+                <Typography variant="body1">
+                  {isSpeakerOn ? 'Speaker Mode' : 'Earpiece Mode'}
+                </Typography>
+              </Box>
             </Box>
           )}
-        </Box>
-
-        {/* Call Controls */}
-        <Box sx={{
-          position: 'absolute',
-          bottom: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          gap: 2,
-          zIndex: 10
-        }}>
-          {callType === 'video' && (
-            <IconButton
-              onClick={onToggleVideo}
-              sx={{
-                width: 48,
-                height: 48,
-                background: isVideoEnabled 
-                  ? 'rgba(255,255,255,0.2)' 
-                  : 'rgba(255,0,0,0.8)',
-                color: 'white',
-                '&:hover': {
-                  background: isVideoEnabled 
-                    ? 'rgba(255,255,255,0.3)' 
-                    : 'rgba(255,0,0,0.9)',
-                  transform: 'scale(1.05)'
-                }
-              }}
-            >
-              {isVideoEnabled ? <Videocam /> : <VideocamOff />}
-            </IconButton>
-          )}
-
-          <IconButton
-            onClick={onToggleAudio}
-            sx={{
-              width: 48,
-              height: 48,
-              background: isAudioEnabled 
-                ? 'rgba(255,255,255,0.2)' 
-                : 'rgba(255,0,0,0.8)',
-              color: 'white',
-              '&:hover': {
-                background: isAudioEnabled 
-                  ? 'rgba(255,255,255,0.3)' 
-                  : 'rgba(255,0,0,0.9)',
-                transform: 'scale(1.05)'
-              }
-            }}
-          >
-            {isAudioEnabled ? <Mic /> : <MicOff />}
-          </IconButton>
-
-          <IconButton
-            onClick={onEndCall}
-            sx={{
-              width: 48,
-              height: 48,
-              background: 'linear-gradient(135deg, #ff4757, #ff3742)',
-              color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #ff3742, #ff2f3a)',
-                transform: 'scale(1.05)'
-              }
-            }}
-          >
-            <CallEnd />
-          </IconButton>
         </Box>
       </Box>
     );

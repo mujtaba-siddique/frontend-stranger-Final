@@ -389,20 +389,46 @@ function App() {
 
       case STATES.CHATTING:
         return (
-          <ChatInterface
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            onEndChat={handleEndChat}
-            onTypingStart={handleTypingStart}
-            onTypingStop={handleTypingStop}
-            onMessageSeen={handleMessageSeen}
-            partnerId={partnerId}
-            userId={userId}
-            isPartnerTyping={isPartnerTyping}
-            isConnected={socketService.isConnected}
-            darkMode={darkMode}
-            onToggleDarkMode={toggleDarkMode}
-          />
+          <>
+            <ChatInterface
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              onEndChat={handleEndChat}
+              onTypingStart={handleTypingStart}
+              onTypingStop={handleTypingStop}
+              onMessageSeen={handleMessageSeen}
+              partnerId={partnerId}
+              userId={userId}
+              isPartnerTyping={isPartnerTyping}
+              isConnected={socketService.isConnected}
+              darkMode={darkMode}
+              onToggleDarkMode={toggleDarkMode}
+            />
+            
+            <VideoCallComponent
+              isCallActive={callManager.isCallActive}
+              callType={callManager.callType}
+              isIncoming={callManager.isIncoming}
+              callerName={callManager.callerName}
+              onAcceptCall={callManager.acceptCall}
+              onRejectCall={callManager.rejectCall}
+              onEndCall={callManager.endCall}
+              onToggleVideo={callManager.toggleVideo}
+              onToggleAudio={callManager.toggleAudio}
+              onToggleSpeaker={callManager.toggleSpeaker}
+              onSwitchCamera={callManager.switchCamera}
+              onUpgradeToVideo={callManager.upgradeToVideo}
+              isVideoEnabled={callManager.isVideoEnabled}
+              isAudioEnabled={callManager.isAudioEnabled}
+              isSpeakerOn={callManager.isSpeakerOn}
+              isFrontCamera={callManager.isFrontCamera}
+              localVideoRef={callManager.localVideoRef}
+              remoteVideoRef={callManager.remoteVideoRef}
+              localAudioRef={callManager.localAudioRef}
+              remoteAudioRef={callManager.remoteAudioRef}
+              darkMode={darkMode}
+            />
+          </>
         );
 
       default:
