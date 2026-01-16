@@ -31,7 +31,9 @@ const useCallManager = (userId, partnerId) => {
   const ICE_SERVERS = useMemo(() => [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' }
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' }
   ], []);
 
   const CALL_TIMEOUT = 30000;
@@ -189,23 +191,8 @@ const useCallManager = (userId, partnerId) => {
     pc.oniceconnectionstatechange = () => {
       const state = pc.iceConnectionState;
       console.log('🧊 ICE connection state:', state);
-      
-      if (state === 'disconnected') {
-        console.log('⚠️ ICE disconnected, waiting for recovery...');
-        setTimeout(() => {
-          if (peerConnectionRef.current && peerConnectionRef.current.iceConnectionState === 'disconnected' && callStateRef.current) {
-            console.log('🔄 Attempting ICE restart after disconnect');
-            reconnectCall();
-          }
-        }, 5000);
-      } else if (state === 'failed') {
-        console.log('❌ ICE failed, attempting restart');
-        if (callStateRef.current) {
-          reconnectCall();
-        }
-      }
     };
-  }, [monitorCallQuality, reconnectCall]);
+  }, [monitorCallQuality]);
 
   const rejectCall = useCallback(() => {
     console.log('📞 Rejecting call');
