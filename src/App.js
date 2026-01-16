@@ -424,7 +424,6 @@ function App() {
               onToggleAudio={callManager.toggleAudio}
               onToggleSpeaker={callManager.toggleSpeaker}
               onSwitchCamera={callManager.switchCamera}
-              onUpgradeToVideo={callManager.upgradeToVideo}
               isVideoEnabled={callManager.isVideoEnabled}
               isAudioEnabled={callManager.isAudioEnabled}
               isSpeakerOn={callManager.isSpeakerOn}

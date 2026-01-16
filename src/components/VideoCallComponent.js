@@ -33,7 +33,6 @@ const VideoCallComponent = ({
   onToggleAudio,
   onToggleSpeaker,
   onSwitchCamera,
-  onUpgradeToVideo,
   isVideoEnabled,
   isAudioEnabled,
   isSpeakerOn,
@@ -249,43 +248,25 @@ const VideoCallComponent = ({
             </IconButton>
 
             {callType === 'audio' && (
-              <>
-                <IconButton
-                  onClick={onToggleSpeaker}
-                  sx={{
-                    width: 44,
-                    height: 44,
+              <IconButton
+                onClick={onToggleSpeaker}
+                sx={{
+                  width: 44,
+                  height: 44,
+                  background: isSpeakerOn 
+                    ? 'rgba(0,255,136,0.3)' 
+                    : 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  '&:hover': {
                     background: isSpeakerOn 
-                      ? 'rgba(0,255,136,0.3)' 
-                      : 'rgba(255,255,255,0.2)',
-                    color: 'white',
-                    '&:hover': {
-                      background: isSpeakerOn 
-                        ? 'rgba(0,255,136,0.4)' 
-                        : 'rgba(255,255,255,0.3)',
-                      transform: 'scale(1.05)'
-                    }
-                  }}
-                >
-                  {isSpeakerOn ? <VolumeUp fontSize="small" /> : <VolumeDown fontSize="small" />}
-                </IconButton>
-                
-                <IconButton
-                  onClick={onUpgradeToVideo}
-                  sx={{
-                    width: 44,
-                    height: 44,
-                    background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                    color: 'white',
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, #764ba2, #667eea)',
-                      transform: 'scale(1.05)'
-                    }
-                  }}
-                >
-                  <Videocam fontSize="small" />
-                </IconButton>
-              </>
+                      ? 'rgba(0,255,136,0.4)' 
+                      : 'rgba(255,255,255,0.3)',
+                    transform: 'scale(1.05)'
+                  }
+                }}
+              >
+                {isSpeakerOn ? <VolumeUp fontSize="small" /> : <VolumeDown fontSize="small" />}
+              </IconButton>
             )}
 
             <IconButton

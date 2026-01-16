@@ -22,6 +22,7 @@ const useCallManager = (userId, partnerId) => {
   const isAnswerSentRef = useRef(false);
   const reconnectAttemptRef = useRef(0);
   const callStateRef = useRef(null);
+  const listenersInitializedRef = useRef(false);
 
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -53,9 +54,18 @@ const useCallManager = (userId, partnerId) => {
 
   // Initialize call listeners
   const initializeCallListeners = useCallback(() => {
+    if (listenersInitializedRef.current) {
+      console.log('⚠️ Listeners already initialized, skipping...');
+      return;
+    }
+    
+    console.log('🔧 Initializing call listeners (ONCE)...');
+    listenersInitializedRef.current = true;
+    
     // Listen for incoming calls
-    socketService.onCallOffer((data) => {
+    socketService.onCallOffer(async (data) => {
       console.log('📞 Incoming call offer:', data);
+      
       incomingCallDataRef.current = data;
       setCallerName('Anonymous Stranger');
       setCallType(data.callType);
@@ -72,18 +82,26 @@ const useCallManager = (userId, partnerId) => {
 
   // Listen for call answers
     socketService.onCallAnswer(async (data) => {
-      console.log('📞 Call answer received:', data);
-      if (peerConnectionRef.current && !isAnswerSentRef.current) {
-        try {
-          // Only set remote description if we're in the right state
-          if (peerConnectionRef.current.signalingState === 'have-local-offer') {
+      console.log('📞 Call answer received');
+      if (peerConnectionRef.current) {
+        const currentState = peerConnectionRef.current.signalingState;
+        console.log('Current signaling state:', currentState);
+        
+        if (currentState === 'stable') {
+          console.log('⚠️ Already in stable state, ignoring duplicate answer');
+          return;
+        }
+        
+        if (currentState === 'have-local-offer' && !isAnswerSentRef.current) {
+          try {
             await peerConnectionRef.current.setRemoteDescription(
               new RTCSessionDescription(data.answer)
             );
             isAnswerSentRef.current = true;
+            console.log('✅ Answer set successfully');
+          } catch (error) {
+            console.error('❌ Error setting remote description:', error);
           }
-        } catch (error) {
-          console.error('Error setting remote description:', error);
         }
       }
     });
@@ -149,12 +167,13 @@ const useCallManager = (userId, partnerId) => {
 
       // Handle remote stream
       pc.ontrack = (event) => {
-        console.log('📞 Remote stream received for', type, 'call');
+        console.log('📞 Remote track received:', event.track.kind, 'for', type, 'call');
         const remoteStream = event.streams[0];
         
-        if (type === 'video' && remoteVideoRef.current) {
+        if (event.track.kind === 'video' && remoteVideoRef.current) {
+          console.log('📹 Setting remote video stream');
           remoteVideoRef.current.srcObject = remoteStream;
-        } else if (type === 'audio' && remoteAudioRef.current) {
+        } else if (event.track.kind === 'audio' && remoteAudioRef.current) {
           console.log('🔊 Setting remote audio stream');
           remoteAudioRef.current.srcObject = remoteStream;
           remoteAudioRef.current.volume = 1.0;
@@ -305,7 +324,6 @@ const useCallManager = (userId, partnerId) => {
   // Reject incoming call
   const rejectCall = useCallback(() => {
     console.log('📞 Rejecting call');
-    setIsIncoming(false);
     
     if (incomingCallDataRef.current) {
       socketService.sendCallEnd({
@@ -313,6 +331,9 @@ const useCallManager = (userId, partnerId) => {
       });
     }
     
+    setIsIncoming(false);
+    setCallType(null);
+    setCallerName('');
     incomingCallDataRef.current = null;
   }, []);
 
@@ -453,44 +474,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [isFrontCamera, callType]);
 
-  // Upgrade audio call to video call
-  const upgradeToVideo = useCallback(async () => {
-    if (callType !== 'audio' || !peerConnectionRef.current) return;
-    
-    try {
-      console.log('📹 Upgrading to video call...');
-      
-      // Get video stream
-      const videoStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
-        audio: false
-      });
-      
-      const videoTrack = videoStream.getVideoTracks()[0];
-      
-      // Add video track to peer connection
-      peerConnectionRef.current.addTrack(videoTrack, localStreamRef.current);
-      
-      // Update local stream
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      localStreamRef.current = new MediaStream([videoTrack, audioTrack]);
-      
-      // Update local video element
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStreamRef.current;
-      }
-      
-      // Update call type
-      setCallType('video');
-      setIsVideoEnabled(true);
-      
-      console.log('✅ Upgraded to video call');
-    } catch (error) {
-      console.error('❌ Video upgrade failed:', error);
-      alert('Could not access camera');
-    }
-  }, [callType]);
-
   return {
     // State
     isCallActive,
@@ -517,8 +500,7 @@ const useCallManager = (userId, partnerId) => {
     toggleVideo,
     toggleAudio,
     toggleSpeaker,
-    switchCamera,
-    upgradeToVideo
+    switchCamera
   };
 };
 
