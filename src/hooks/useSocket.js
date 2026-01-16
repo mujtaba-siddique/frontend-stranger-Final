@@ -27,7 +27,7 @@ export const useSocket = (userProfile, showNotification, updateActivity) => {
       updateActivity();
       
       const sessionData = {
-        userId: data.userId,
+        userId: data.userId || handlers.userId,
         partnerId: data.partnerId,
         sessionId: data.sessionId,
         timestamp: Date.now(),
@@ -36,7 +36,15 @@ export const useSocket = (userProfile, showNotification, updateActivity) => {
       };
       localStorage.setItem('activeSession', JSON.stringify(sessionData));
       
-      showNotification('🎉 Connected with a stranger! Say hello!', 'success');
+      if (data.reconnected) {
+        showNotification('🔄 Reconnected to your chat!', 'success');
+        const savedMessages = localStorage.getItem('chatMessages');
+        if (savedMessages) {
+          setMessages(JSON.parse(savedMessages));
+        }
+      } else {
+        showNotification('🎉 Connected with a stranger! Say hello!', 'success');
+      }
       
       if (Notification.permission === 'default') {
         Notification.requestPermission();
@@ -161,13 +169,45 @@ export const useSocket = (userProfile, showNotification, updateActivity) => {
       showNotification(`⏰ ${data.reason}`, 'warning');
     });
 
+    socketService.onPartnerConnectionLost((data) => {
+      showNotification('⚠️ Partner connection lost. Waiting for reconnection...', 'warning');
+      setConnectionStatus('partner-reconnecting');
+    });
+
+    socketService.onPartnerReconnected((data) => {
+      showNotification('✅ Partner reconnected!', 'success');
+      setConnectionStatus('matched');
+    });
+
+    socketService.onCallConnectionLost((data) => {
+      showNotification('📞 Call connection lost. Reconnecting...', 'warning');
+    });
+
+    socketService.onCallReconnectNeeded((data) => {
+      showNotification('📞 Attempting to reconnect call...', 'info');
+    });
+
+    socketService.onCallFailed((data) => {
+      showNotification(`📞 Call failed: ${data.reason}`, 'error');
+    });
+
     socketService.onConnect(() => {
       setConnectionStatus('connected');
       setRetryCount(0);
+      
+      const savedSession = localStorage.getItem('activeSession');
+      if (savedSession) {
+        const session = JSON.parse(savedSession);
+        const timeSinceMatch = Date.now() - session.timestamp;
+        if (timeSinceMatch < 900000) {
+          showNotification('🔄 Reconnecting to your session...', 'info');
+        }
+      }
     });
     
     socketService.onDisconnect(() => {
       setConnectionStatus('disconnected');
+      showNotification('⚠️ Connection lost. Reconnecting...', 'warning');
     });
   }, [userProfile, showNotification, updateActivity, maxRetries]);
 

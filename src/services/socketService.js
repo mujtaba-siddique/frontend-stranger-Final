@@ -25,9 +25,10 @@ class SocketService {
         transports: ['websocket', 'polling'],
         forceNew: true,
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10,
         reconnectionDelay: 1000,
-        timeout: 10000
+        reconnectionDelayMax: 5000,
+        timeout: 20000
       });
       
       this.socket.on('connect', () => {
@@ -48,6 +49,11 @@ class SocketService {
       this.socket.on('reconnect', (attemptNumber) => {
         this.isConnected = true;
         console.log('🔄 RECONNECTED after', attemptNumber, 'attempts');
+        const savedSession = localStorage.getItem('activeSession');
+        if (savedSession) {
+          const session = JSON.parse(savedSession);
+          this.joinChat(session.userId);
+        }
       });
 
       return this.socket;
@@ -222,6 +228,24 @@ class SocketService {
     }
   }
 
+  onPartnerConnectionLost(callback) {
+    if (this.socket) {
+      this.socket.on('partner-connection-lost', callback);
+    }
+  }
+
+  onCallConnectionLost(callback) {
+    if (this.socket) {
+      this.socket.on('call-connection-lost', callback);
+    }
+  }
+
+  onCallReconnectNeeded(callback) {
+    if (this.socket) {
+      this.socket.on('call-reconnect-needed', callback);
+    }
+  }
+
   // Video Call Methods
   sendCallOffer(data) {
     if (this.socket && this.isConnected) {
@@ -275,6 +299,12 @@ class SocketService {
     }
   }
 
+  onCallFailed(callback) {
+    if (this.socket) {
+      this.socket.on('call-failed', callback);
+    }
+  }
+
   removeAllListeners() {
     if (this.socket) {
       console.log('🧽 Removing all socket listeners');
@@ -289,7 +319,9 @@ class SocketService {
         'user-created', 'matched', 'waiting', 'new-message', 'message-sent',
         'chat-ended', 'partner-typing', 'error', 'message-delivered', 
         'message-seen-by-partner', 'enable-end-chat', 'session-timeout', 
-        'inactivity-warning', 'call-offer', 'call-answer', 'ice-candidate', 'call-ended'
+        'inactivity-warning', 'call-offer', 'call-answer', 'ice-candidate', 
+        'call-ended', 'call-failed', 'partner-reconnected', 'partner-connection-lost',
+        'call-connection-lost', 'call-reconnect-needed'
       ];
       
       events.forEach(event => {

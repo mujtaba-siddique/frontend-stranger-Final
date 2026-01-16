@@ -23,7 +23,7 @@ import {
 
 const VideoCallComponent = ({
   isCallActive,
-  callType, // 'video' or 'audio'
+  callType,
   isIncoming,
   callerName,
   onAcceptCall,
@@ -42,7 +42,8 @@ const VideoCallComponent = ({
   remoteVideoRef,
   localAudioRef,
   remoteAudioRef,
-  darkMode
+  darkMode,
+  isReconnecting = false
 }) => {
   const [callDuration, setCallDuration] = useState(0);
   const callStartTime = useRef(null);
@@ -177,7 +178,7 @@ const VideoCallComponent = ({
               Anonymous Stranger
             </Typography>
             <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.75rem' }}>
-              {formatDuration(callDuration)}
+              {isReconnecting ? '🔄 Reconnecting...' : formatDuration(callDuration)}
             </Typography>
           </Box>
           
@@ -332,6 +333,26 @@ const VideoCallComponent = ({
                 }}
               />
               
+              {isReconnecting && (
+                <Box sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  textAlign: 'center',
+                  background: 'rgba(0,0,0,0.8)',
+                  p: 3,
+                  borderRadius: 2
+                }}>
+                  <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
+                    🔄 Reconnecting...
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                    Please wait while we restore your connection
+                  </Typography>
+                </Box>
+              )}
+              
               {/* Local Video (Your video - small window) */}
               <video
                 ref={localVideoRef}
@@ -379,7 +400,7 @@ const VideoCallComponent = ({
                 Voice Call
               </Typography>
               <Typography variant="h6" sx={{ opacity: 0.7, mb: 2 }}>
-                {formatDuration(callDuration)}
+                {isReconnecting ? '🔄 Reconnecting...' : formatDuration(callDuration)}
               </Typography>
               <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                 <VolumeUp sx={{ color: isAudioEnabled ? '#00ff88' : '#ff4757', fontSize: '2rem' }} />
