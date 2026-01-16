@@ -179,9 +179,6 @@ const useCallManager = (userId, partnerId) => {
       if (pc.connectionState === 'connected') {
         reconnectAttemptRef.current = 0;
         monitorCallQuality();
-      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-        console.log('⚠️ Connection lost');
-        setTimeout(() => reconnectCall(), 1000);
       }
     };
 
@@ -191,6 +188,15 @@ const useCallManager = (userId, partnerId) => {
 
     pc.oniceconnectionstatechange = () => {
       console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      
+      if (pc.iceConnectionState === 'failed') {
+        console.log('⚠️ ICE connection failed, attempting restart');
+        setTimeout(() => {
+          if (callStateRef.current) {
+            reconnectCall();
+          }
+        }, 2000);
+      }
     };
   }, [monitorCallQuality, reconnectCall]);
 
@@ -310,8 +316,12 @@ const useCallManager = (userId, partnerId) => {
 
     socketService.socket?.on('reconnect', () => {
       if (callStateRef.current) {
-        console.log('🔄 Network reconnected');
-        reconnectCall();
+        console.log('🔄 Network reconnected, attempting call reconnect');
+        setTimeout(() => {
+          if (callStateRef.current) {
+            reconnectCall();
+          }
+        }, 1000);
       }
     });
   }, [processIceCandidateQueue, rejectCall, endCall, reconnectCall]);
