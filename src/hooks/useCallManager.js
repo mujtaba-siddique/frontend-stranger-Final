@@ -261,7 +261,14 @@ const useCallManager = (userId, partnerId) => {
 
       callTimeoutRef.current = setTimeout(() => {
         console.log('⏰ Call timeout');
-        rejectCall();
+        cleanup();
+        if (incomingCallDataRef.current) {
+          socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
+        }
+        setIsIncoming(false);
+        setCallType(null);
+        setCallerName('');
+        incomingCallDataRef.current = null;
       }, CALL_TIMEOUT);
     });
 
@@ -311,7 +318,7 @@ const useCallManager = (userId, partnerId) => {
     socketService.socket?.on('reconnect', () => {
       console.log('🔄 Socket reconnected');
     });
-  }, [processIceCandidateQueue, rejectCall, endCall]);
+  }, [processIceCandidateQueue, endCall, cleanup]);
 
   const startCall = useCallback(async (type) => {
     if (!partnerId || isCallActive) return;
