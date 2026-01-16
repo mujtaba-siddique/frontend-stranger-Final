@@ -19,13 +19,8 @@ const useCallManager = (userId, partnerId) => {
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const incomingCallDataRef = useRef(null);
-  const isOfferSentRef = useRef(false);
-  const isAnswerSentRef = useRef(false);
-  const reconnectAttemptRef = useRef(0);
   const callStateRef = useRef(null);
   const listenersInitializedRef = useRef(false);
-  const iceCandidateQueueRef = useRef([]);
-  const callTimeoutRef = useRef(null);
   const qualityCheckIntervalRef = useRef(null);
 
   const ICE_SERVERS = useMemo(() => [
@@ -39,15 +34,10 @@ const useCallManager = (userId, partnerId) => {
   const CALL_TIMEOUT = 30000;
 
   const cleanup = useCallback(() => {
-    if (callTimeoutRef.current) {
-      clearTimeout(callTimeoutRef.current);
-      callTimeoutRef.current = null;
-    }
     if (qualityCheckIntervalRef.current) {
       clearInterval(qualityCheckIntervalRef.current);
       qualityCheckIntervalRef.current = null;
     }
-    iceCandidateQueueRef.current = [];
   }, []);
 
   const monitorCallQuality = useCallback(() => {
@@ -78,17 +68,7 @@ const useCallManager = (userId, partnerId) => {
   }, []);
 
   const processIceCandidateQueue = useCallback(async () => {
-    if (!peerConnectionRef.current || peerConnectionRef.current.remoteDescription === null) return;
-
-    while (iceCandidateQueueRef.current.length > 0) {
-      const candidate = iceCandidateQueueRef.current.shift();
-      try {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-        console.log('✅ Queued ICE candidate added');
-      } catch (err) {
-        console.error('❌ Error adding queued ICE candidate:', err);
-      }
-    }
+    // ICE queueing handled by backend
   }, []);
 
   const getUserMedia = useCallback(async (type) => {
@@ -143,7 +123,6 @@ const useCallManager = (userId, partnerId) => {
       console.log('📞 Connection state:', pc.connectionState);
       
       if (pc.connectionState === 'connected') {
-        reconnectAttemptRef.current = 0;
         monitorCallQuality();
       }
     };
@@ -160,7 +139,6 @@ const useCallManager = (userId, partnerId) => {
 
   const rejectCall = useCallback(() => {
     console.log('📞 Rejecting call');
-    cleanup();
     
     if (incomingCallDataRef.current) {
       socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
@@ -170,15 +148,12 @@ const useCallManager = (userId, partnerId) => {
     setCallType(null);
     setCallerName('');
     incomingCallDataRef.current = null;
-  }, [cleanup]);
+  }, []);
 
   const endCall = useCallback(() => {
     console.log('📞 Ending call');
     cleanup();
     
-    isOfferSentRef.current = false;
-    isAnswerSentRef.current = false;
-    reconnectAttemptRef.current = 0;
     callStateRef.current = null;
     
     if (peerConnectionRef.current) {
@@ -222,18 +197,6 @@ const useCallManager = (userId, partnerId) => {
       setCallerName('Anonymous Stranger');
       setCallType(data.callType);
       setIsIncoming(true);
-
-      callTimeoutRef.current = setTimeout(() => {
-        console.log('⏰ Call timeout');
-        cleanup();
-        if (incomingCallDataRef.current) {
-          socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
-        }
-        setIsIncoming(false);
-        setCallType(null);
-        setCallerName('');
-        incomingCallDataRef.current = null;
-      }, CALL_TIMEOUT);
     });
 
     socketService.onCallAnswer(async (data) => {
@@ -261,16 +224,11 @@ const useCallManager = (userId, partnerId) => {
     socketService.onIceCandidate(async (data) => {
       if (!peerConnectionRef.current || !data.candidate) return;
 
-      if (peerConnectionRef.current.remoteDescription === null) {
-        console.log('📦 Queueing ICE candidate');
-        iceCandidateQueueRef.current.push(data.candidate);
-      } else {
-        try {
-          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-          console.log('✅ ICE candidate added');
-        } catch (err) {
-          console.error('❌ Error adding ICE candidate:', err);
-        }
+      try {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+        console.log('✅ ICE candidate added');
+      } catch (err) {
+        console.error('❌ Error adding ICE candidate:', err);
       }
     });
 
@@ -290,9 +248,6 @@ const useCallManager = (userId, partnerId) => {
     console.log(`📞 Starting ${type} call`);
     
     try {
-      isOfferSentRef.current = false;
-      isAnswerSentRef.current = false;
-      reconnectAttemptRef.current = 0;
       callStateRef.current = { type, isInitiator: true };
       
       setCallType(type);
@@ -324,26 +279,21 @@ const useCallManager = (userId, partnerId) => {
     } catch (error) {
       console.error('📞 Error starting call:', error);
       alert(error.message || 'Could not access camera/microphone');
-      cleanup();
       setIsCallActive(false);
       setCallType(null);
     }
-  }, [partnerId, userId, isCallActive, getUserMedia, setupPeerConnection, ICE_SERVERS, cleanup]);
+  }, [partnerId, userId, isCallActive, getUserMedia, setupPeerConnection, ICE_SERVERS]);
 
   const acceptCall = useCallback(async () => {
     const data = incomingCallDataRef.current;
     if (!data) return;
 
     console.log('📞 Accepting call');
-    cleanup();
     
     try {
       setIsIncoming(false);
       setIsCallActive(true);
       
-      isOfferSentRef.current = false;
-      isAnswerSentRef.current = false;
-      reconnectAttemptRef.current = 0;
       callStateRef.current = { type: data.callType, isInitiator: false };
 
       const stream = await getUserMedia(data.callType);
@@ -373,7 +323,6 @@ const useCallManager = (userId, partnerId) => {
     } catch (error) {
       console.error('📞 Error accepting call:', error);
       alert(error.message || 'Could not access camera/microphone');
-      cleanup();
       if (incomingCallDataRef.current) {
         socketService.sendCallEnd({ to: incomingCallDataRef.current.from });
       }
@@ -382,7 +331,7 @@ const useCallManager = (userId, partnerId) => {
       setCallerName('');
       incomingCallDataRef.current = null;
     }
-  }, [getUserMedia, setupPeerConnection, processIceCandidateQueue, cleanup, ICE_SERVERS]);
+  }, [getUserMedia, setupPeerConnection, processIceCandidateQueue, ICE_SERVERS]);
 
   const toggleVideo = useCallback(() => {
     if (localStreamRef.current) {

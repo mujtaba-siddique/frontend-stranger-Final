@@ -25,9 +25,9 @@ class SocketService {
         transports: ['websocket', 'polling'],
         forceNew: true,
         reconnection: true,
-        reconnectionAttempts: 10,
+        reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionDelayMax: 3000,
         timeout: 20000
       });
       
@@ -49,11 +49,6 @@ class SocketService {
       this.socket.on('reconnect', (attemptNumber) => {
         this.isConnected = true;
         console.log('🔄 RECONNECTED after', attemptNumber, 'attempts');
-        const savedSession = localStorage.getItem('activeSession');
-        if (savedSession) {
-          const session = JSON.parse(savedSession);
-          this.joinChat(session.userId);
-        }
       });
 
       return this.socket;
@@ -81,10 +76,10 @@ class SocketService {
     }
   }
 
-  sendMessage(message, messageId) {
+  sendMessage(message) {
     if (this.socket && this.isConnected && message.trim()) {
-      console.log('📤 SENDING MESSAGE:', { message, messageId });
-      this.socket.emit('send-message', { message, messageId });
+      console.log('📤 SENDING MESSAGE:', { message });
+      this.socket.emit('send-message', { message });
     } else {
       console.error('❌ Cannot send message - socket not connected or empty message');
     }
@@ -92,19 +87,13 @@ class SocketService {
   
   startTyping() {
     if (this.socket && this.isConnected) {
-      console.log('⌨️ EMITTING: typing-start');
       this.socket.emit('typing-start');
-    } else {
-      console.log('❌ Cannot emit typing-start - not connected');
     }
   }
   
   stopTyping() {
     if (this.socket && this.isConnected) {
-      console.log('✋ EMITTING: typing-stop');
       this.socket.emit('typing-stop');
-    } else {
-      console.log('❌ Cannot emit typing-stop - not connected');
     }
   }
   
@@ -287,24 +276,28 @@ class SocketService {
 
   onCallOffer(callback) {
     if (this.socket) {
+      this.socket.off('call-offer');
       this.socket.on('call-offer', callback);
     }
   }
 
   onCallAnswer(callback) {
     if (this.socket) {
+      this.socket.off('call-answer');
       this.socket.on('call-answer', callback);
     }
   }
 
   onIceCandidate(callback) {
     if (this.socket) {
+      this.socket.off('ice-candidate');
       this.socket.on('ice-candidate', callback);
     }
   }
 
   onCallEnded(callback) {
     if (this.socket) {
+      this.socket.off('call-ended');
       this.socket.on('call-ended', callback);
     }
   }
