@@ -198,6 +198,13 @@ function App() {
       setMessages([]);
       setPartnerId(null);
       setSessionId(null);
+      
+      if (userProfile) {
+        showNotification('🔄 Finding you a new stranger...', 'info');
+        setTimeout(() => {
+          socketService.joinChat(userProfile.id);
+        }, 1000);
+      }
     });
 
     socketService.onPartnerTyping((data) => {

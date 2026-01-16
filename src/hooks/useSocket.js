@@ -118,6 +118,13 @@ export const useSocket = (userProfile, showNotification, updateActivity) => {
       
       localStorage.removeItem('activeSession');
       localStorage.removeItem('chatMessages');
+      
+      if (userProfile) {
+        showNotification('🔄 Finding you a new stranger...', 'info');
+        setTimeout(() => {
+          socketService.joinChat(userProfile.id);
+        }, 1000);
+      }
     });
 
     socketService.onPartnerTyping((data) => {
