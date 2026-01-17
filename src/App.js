@@ -44,8 +44,12 @@ function App() {
   const [, setSessionId] = useState(null);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'info' });
-  const [userProfile, setUserProfile] = useState(null);
+  const [userProfile, setUserProfile] = useState(() => {
+    const saved = localStorage.getItem('userProfile');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [sessionTimeoutOpen, setSessionTimeoutOpen] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   // Video call manager
   const callManager = useCallManager(userId, partnerId);
@@ -117,6 +121,8 @@ function App() {
         const userData = await response.json();
         console.log('Profile created:', userData);
         setUserProfile(userData);
+        // Save profile to localStorage
+        localStorage.setItem('userProfile', JSON.stringify(userData));
         showNotification('Profile created! Finding strangers...', 'success');
         setState(STATES.CONNECTING);
         handleConnectWithProfile(userData);
@@ -141,9 +147,11 @@ function App() {
     handleConnectWithProfile(userProfile);
   };
   
-  const handleConnectWithProfile = (profileData) => {
+  const handleConnectWithProfile = (profileData, skipClearMessages = false) => {
     setState(STATES.CONNECTING);
-    setMessages([]);
+    if (!skipClearMessages) {
+      setMessages([]);
+    }
     
     console.log('🚀 Connecting with profile:', profileData);
     
@@ -164,7 +172,20 @@ function App() {
       setState(STATES.CHATTING);
       setPartnerId(data.partnerId);
       setSessionId(data.sessionId);
-      showNotification('Connected with a stranger!', 'success');
+      
+      // Save session to localStorage
+      localStorage.setItem('chatSession', JSON.stringify({
+        partnerId: data.partnerId,
+        sessionId: data.sessionId,
+        timestamp: Date.now()
+      }));
+      
+      if (isReconnecting) {
+        showNotification('Reconnected successfully!', 'success');
+        setIsReconnecting(false);
+      } else {
+        showNotification('Connected with a stranger!', 'success');
+      }
     });
 
     socketService.onWaiting((data) => {
@@ -175,7 +196,11 @@ function App() {
 
     socketService.onNewMessage((message) => {
       console.log('📩 Received message:', message.id);
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        const updated = [...prev, message];
+        localStorage.setItem('chatMessages', JSON.stringify(updated));
+        return updated;
+      });
       
       if (document.hidden) {
         notificationService.showMessageNotification(message.message);
@@ -189,7 +214,11 @@ function App() {
 
     socketService.onMessageSent((message) => {
       console.log('📤 Message sent:', message.id, 'status:', message.status);
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        const updated = [...prev, message];
+        localStorage.setItem('chatMessages', JSON.stringify(updated));
+        return updated;
+      });
     });
 
     socketService.onChatEnded((data) => {
@@ -198,6 +227,10 @@ function App() {
       setMessages([]);
       setPartnerId(null);
       setSessionId(null);
+      
+      // Clear session and messages from localStorage (intentional end)
+      localStorage.removeItem('chatSession');
+      localStorage.removeItem('chatMessages');
       
       if (userProfile) {
         showNotification('🔄 Finding you a new stranger...', 'info');
@@ -218,30 +251,46 @@ function App() {
     
     socketService.onMessageDelivered((data) => {
       console.log('✅ Message delivered:', data.messageId);
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId ? { ...msg, status: 'delivered' } : msg
-      ));
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === data.messageId ? { ...msg, status: 'delivered' } : msg
+        );
+        localStorage.setItem('chatMessages', JSON.stringify(updated));
+        return updated;
+      });
     });
     
     socketService.onMessageSeenByPartner((data) => {
       console.log('👁️ Message seen:', data.messageId);
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
-      ));
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
+        );
+        localStorage.setItem('chatMessages', JSON.stringify(updated));
+        return updated;
+      });
     });
     
     socketService.onMessageStatusUpdate((data) => {
       console.log('📊 Message status update:', data.messageId, 'status:', data.status);
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId ? { ...msg, status: data.status } : msg
-      ));
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === data.messageId ? { ...msg, status: data.status } : msg
+        );
+        localStorage.setItem('chatMessages', JSON.stringify(updated));
+        return updated;
+      });
     });
     
     socketService.onMessageFailed((data) => {
       console.log('❌ Message failed:', data.messageId, 'error:', data.error);
-      setMessages(prev => prev.map(msg => 
-        msg.id === data.messageId ? { ...msg, status: 'failed' } : msg
-      ));
+      setMessages(prev => {
+        const updated = prev.map(msg => 
+          msg.id === data.messageId ? { ...msg, status: 'failed' } : msg
+        );
+        localStorage.setItem('chatMessages', JSON.stringify(updated));
+        return updated;
+      });
       showNotification(data.error, 'error');
     });
     
@@ -255,9 +304,12 @@ function App() {
       console.log('⏰ Session timeout:', data.reason);
       setSessionTimeoutOpen(true);
       setState(STATES.DISCONNECTED);
+      // Clear everything on timeout - user is inactive
       setMessages([]);
       setPartnerId(null);
       setSessionId(null);
+      localStorage.removeItem('chatSession');
+      localStorage.removeItem('chatMessages');
       showNotification(data.reason, 'warning');
     });
   };
@@ -281,6 +333,9 @@ function App() {
   };
 
   const handleEndChat = () => {
+    // Mark as intentional end - clear everything
+    localStorage.removeItem('chatSession');
+    localStorage.removeItem('chatMessages');
     socketService.endChat();
   };
 
@@ -291,6 +346,10 @@ function App() {
     setUserId(null);
     setPartnerId(null);
     setSessionId(null);
+    // Clear all session data
+    localStorage.removeItem('chatSession');
+    localStorage.removeItem('chatMessages');
+    localStorage.removeItem('userProfile');
   };
 
 
@@ -307,6 +366,47 @@ function App() {
       setState(STATES.PROFILE_SETUP);
     }
   };
+
+  useEffect(() => {
+    // Auto-reconnect on page load if session exists (only once on mount)
+    const savedSession = localStorage.getItem('chatSession');
+    const savedMessages = localStorage.getItem('chatMessages');
+    
+    if (savedSession && userProfile) {
+      console.log('🔄 Auto-reconnecting to previous session...');
+      setIsReconnecting(true);
+      
+      // Restore messages from localStorage
+      if (savedMessages) {
+        try {
+          const parsedMessages = JSON.parse(savedMessages);
+          setMessages(parsedMessages);
+          console.log('📥 Restored', parsedMessages.length, 'messages');
+        } catch (e) {
+          console.error('Failed to parse messages:', e);
+        }
+      }
+      
+      setState(STATES.CONNECTING);
+      handleConnectWithProfile(userProfile, true); // Don't clear messages
+    }
+  }, []); // Run only once on mount
+
+  useEffect(() => {
+    // Warn user before leaving if in chat
+    const handleBeforeUnload = (e) => {
+      if (state === STATES.CHATTING) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [state]);
 
   useEffect(() => {
     return () => {
@@ -371,9 +471,11 @@ function App() {
               setState(STATES.LANDING);
               setMessages([]);
               setPartnerId(null);
+              localStorage.removeItem('chatSession');
             }}
             darkMode={darkMode}
             onToggleDarkMode={toggleDarkMode}
+            message={isReconnecting ? 'Reconnecting to your chat...' : undefined}
           />
         );
 
@@ -385,6 +487,7 @@ function App() {
               setState(STATES.LANDING);
               setMessages([]);
               setPartnerId(null);
+              localStorage.removeItem('chatSession');
             }}
             darkMode={darkMode}
             onToggleDarkMode={toggleDarkMode}
@@ -407,6 +510,7 @@ function App() {
               isConnected={socketService.isConnected}
               darkMode={darkMode}
               onToggleDarkMode={toggleDarkMode}
+              socket={socketService.socket}
             />
             
             <VideoCallComponent

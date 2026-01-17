@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import { PersonSearch, Close, LightMode, DarkMode } from '@mui/icons-material';
 
-const WaitingRoom = ({ onCancel, darkMode, onToggleDarkMode }) => {
+const WaitingRoom = ({ onCancel, darkMode, onToggleDarkMode, message }) => {
   return (
     <Box sx={{ 
       minHeight: '100vh',
@@ -72,7 +72,7 @@ const WaitingRoom = ({ onCancel, darkMode, onToggleDarkMode }) => {
               mb: 2
             }}
           >
-            Finding Your Match...
+            {message || 'Finding Your Match...'}
           </Typography>
           <Typography 
             variant="body1" 
@@ -82,8 +82,10 @@ const WaitingRoom = ({ onCancel, darkMode, onToggleDarkMode }) => {
               lineHeight: 1.6
             }}
           >
-            We're connecting you with someone interesting from around the world. 
-            This usually takes just a few seconds!
+            {message 
+              ? 'Please wait while we restore your connection...'
+              : 'We\'re connecting you with someone interesting from around the world. This usually takes just a few seconds!'
+            }
           </Typography>
         </Box>
         

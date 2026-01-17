@@ -14,6 +14,7 @@ import MessageStatus from './MessageStatus';
 import TypingIndicator from './TypingIndicator';
 import VideoCallComponent from './VideoCallComponent';
 import useCallManager from '../hooks/useCallManager';
+import { VoiceRecorder, VoicePlayer, WebRTCVoice } from '../utils/voiceClasses';
 
 import { validateMessage, sanitizeMessage, detectSpam } from '../utils/messageValidator';
 // Simple ID generator to avoid uuid issues
@@ -31,16 +32,128 @@ const ChatInterface = ({
   onMessageSeen,
   isConnected = true,
   darkMode,
-  onToggleDarkMode
+  onToggleDarkMode,
+  socket
 }) => {
   const messagesEndRef = useRef(null);
   const [showTyping, setShowTyping] = useState(false);
   const [endChatEnabled, setEndChatEnabled] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const seenMessagesRef = useRef(new Set());
+  const [localMessages, setLocalMessages] = useState([]);
+  const voiceBlobsRef = useRef(new Map());
+  
+  // Voice messaging refs
+  const recorderRef = useRef(null);
+  const playerRef = useRef(null);
+  const webrtcRef = useRef(null);
   
   // Initialize call manager
   const callManager = useCallManager(userId, partnerId);
+  
+  // Initialize voice messaging
+  useEffect(() => {
+    if (socket && userId) {
+      console.log('🎤 Initializing voice messaging...', { userId, partnerId });
+      
+      try {
+        recorderRef.current = new VoiceRecorder();
+        playerRef.current = new VoicePlayer();
+        webrtcRef.current = new WebRTCVoice(socket, userId);
+        
+        webrtcRef.current.onVoiceReceived = (data) => {
+          console.log('📥 Voice data received:', data.byteLength, 'bytes');
+          if (playerRef.current) {
+            playerRef.current.addChunk(data);
+          }
+        };
+        
+        webrtcRef.current.onChannelOpen = () => {
+          console.log('📡 DataChannel opened, starting receiver...');
+          if (playerRef.current) {
+            playerRef.current.startReceiving();
+          }
+        };
+        
+        playerRef.current.onVoiceMessageReceived = (blob, messageId) => {
+          console.log('🎵 Voice message received with ID:', messageId);
+          
+          // Generate fallback ID if messageId is null
+          const finalMessageId = messageId || `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
+          const voiceMessage = {
+            id: finalMessageId,
+            type: 'voice',
+            senderId: partnerId,
+            timestamp: Date.now(),
+            status: 'received',
+            duration: Math.floor(blob.size / 16000)
+          };
+          voiceBlobsRef.current.set(voiceMessage.id, blob);
+          setLocalMessages(prev => [...prev, voiceMessage]);
+          
+          // Notify sender that voice message was delivered
+          if (socket && partnerId) {
+            socket.emit('voice-message-delivered', { messageId: finalMessageId, to: partnerId });
+          }
+        };
+        
+        // Remove old listeners first
+        socket.off('voice-message-delivered');
+        socket.off('voice-message-played');
+        
+        // Listen for delivery confirmation
+        socket.on('voice-message-delivered', (data) => {
+          console.log('✓✓ [SENDER] Voice message delivered:', data.messageId);
+          setLocalMessages(prev => prev.map(msg => 
+            msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
+          ));
+        });
+        
+        // Listen for playback (seen) event
+        socket.on('voice-message-played', (data) => {
+          console.log('🗑️ [SENDER] Partner played voice message:', data.messageId);
+          
+          setLocalMessages(prev => {
+            console.log('🗑️ [SENDER] Filtering messages, current count:', prev.length);
+            const filtered = prev.filter(msg => msg.id !== data.messageId);
+            console.log('🗑️ [SENDER] After filter count:', filtered.length);
+            return filtered;
+          });
+          
+          // Just delete blob from map, no URL revocation needed
+          if (voiceBlobsRef.current.has(data.messageId)) {
+            console.log('🗑️ [SENDER] Cleaning up blob for:', data.messageId);
+            voiceBlobsRef.current.delete(data.messageId);
+          }
+        });
+        
+        console.log('🎉 Voice messaging initialized successfully!');
+      } catch (error) {
+        console.error('❌ Voice component creation failed:', error);
+      }
+    }
+    
+    return () => {
+      console.log('🧹 Cleaning up voice components...');
+      
+      // Remove socket listeners
+      if (socket) {
+        socket.off('voice-message-delivered');
+        socket.off('voice-message-played');
+      }
+      
+      if (recorderRef.current) {
+        recorderRef.current.cleanup();
+      }
+      if (playerRef.current) {
+        playerRef.current.stop();
+      }
+      if (webrtcRef.current) {
+        webrtcRef.current.close();
+      }
+    };
+  }, [socket, userId, partnerId]);
   
   useEffect(() => {
     // Initialize call listeners when component mounts
@@ -98,6 +211,100 @@ const ChatInterface = ({
     const sanitizedMessage = sanitizeMessage(message.trim());
     const messageId = generateId();
     onSendMessage(sanitizedMessage, messageId);
+  };
+  
+  const handleVoiceRecord = async (action) => {
+    console.log('🎤 Voice Record:', action, {
+      hasRecorder: !!recorderRef.current,
+      hasWebRTC: !!webrtcRef.current,
+      partnerId: partnerId
+    });
+    
+    if (!recorderRef.current || !webrtcRef.current || !partnerId) {
+      console.error('❌ Voice not ready:', {
+        recorder: !!recorderRef.current,
+        webrtc: !!webrtcRef.current,
+        partner: !!partnerId
+      });
+      return;
+    }
+    
+    if (action === 'start') {
+      try {
+        console.log('🎙️ Starting recording...');
+        const success = await recorderRef.current.startRecording();
+        if (!success) {
+          console.error('❌ Failed to start recording');
+        } else {
+          console.log('✅ Recording started');
+        }
+      } catch (error) {
+        console.error('❌ Recording error:', error);
+      }
+    } else if (action === 'stop') {
+      try {
+        console.log('⏹️ Stopping recording...');
+        const blob = await recorderRef.current.stopRecording();
+        console.log('📦 Blob received:', blob?.size, 'bytes');
+        
+        if (blob && blob.size > 0) {
+          const voiceMessage = {
+            id: Date.now().toString(),
+            type: 'voice',
+            senderId: userId,
+            timestamp: Date.now(),
+            status: 'sent',
+            duration: Math.floor(blob.size / 16000)
+          };
+          voiceBlobsRef.current.set(voiceMessage.id, blob);
+          setLocalMessages(prev => [...prev, voiceMessage]);
+          
+          console.log('📤 Sending voice to:', partnerId, 'with messageId:', voiceMessage.id);
+          await webrtcRef.current.sendVoiceBlob(blob, partnerId, voiceMessage.id);
+          console.log('✅ Voice sent successfully');
+        } else {
+          console.error('❌ Empty blob - not sending');
+        }
+      } catch (error) {
+        console.error('❌ Send voice error:', error);
+      }
+    }
+  };
+  
+  const handleVoicePlay = (messageId, senderId) => {
+    const blob = voiceBlobsRef.current.get(messageId);
+    if (!blob) {
+      console.error('❌ No blob found for messageId:', messageId);
+      return;
+    }
+    
+    if (!playerRef.current) {
+      console.error('❌ Player not initialized');
+      return;
+    }
+    
+    console.log('🔊 [PLAY] Playing voice:', messageId, 'from:', senderId, 'myId:', userId);
+    
+    const onPlaybackEnd = () => {
+      console.log('🗑️ [END] Playback ended for:', messageId);
+      
+      setLocalMessages(prev => {
+        const filtered = prev.filter(msg => msg.id !== messageId);
+        console.log('🗑️ [END] Deleted from UI, before:', prev.length, 'after:', filtered.length);
+        return filtered;
+      });
+      
+      voiceBlobsRef.current.delete(messageId);
+      
+      if (senderId !== userId && socket && partnerId) {
+        console.log('📤 [END] Notifying sender:', messageId, 'to:', partnerId);
+        socket.emit('voice-message-played', { messageId, to: partnerId });
+      } else {
+        console.log('🚫 [END] Not notifying - own message');
+      }
+    };
+    
+    playerRef.current.playVoice(blob, onPlaybackEnd);
   };
 
   return (
@@ -367,8 +574,9 @@ const ChatInterface = ({
           </Typography>
         </Alert>
         
-        {messages.map((msg, index) => {
+        {[...messages, ...localMessages].sort((a, b) => a.timestamp - b.timestamp).map((msg, index) => {
           const isOwn = msg.senderId === userId;
+          const isVoice = msg.type === 'voice';
           
           return (
             <Box
@@ -427,14 +635,67 @@ const ChatInterface = ({
                   transition: 'all 0.2s ease'
                 }}
               >
-                <Typography variant="body1" sx={{ 
-                  lineHeight: 1.4,
-                  fontSize: { xs: '13px', sm: '14px', md: '15px' },
-                  fontWeight: 400,
-                  wordBreak: 'break-word'
-                }}>
-                  {msg.message}
-                </Typography>
+                {isVoice ? (
+                  <Box 
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
+                    onClick={() => handleVoicePlay(msg.id, msg.senderId)}
+                  >
+                    <Box sx={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      background: isOwn ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '20px'
+                    }}>
+                      🎤
+                    </Box>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+                        Voice Message
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 0.5,
+                        opacity: 0.8
+                      }}>
+                        <Box sx={{
+                          width: 4,
+                          height: 4,
+                          borderRadius: '50%',
+                          background: 'currentColor'
+                        }} />
+                        <Box sx={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: 'currentColor'
+                        }} />
+                        <Box sx={{
+                          width: 4,
+                          height: 4,
+                          borderRadius: '50%',
+                          background: 'currentColor'
+                        }} />
+                        <Typography variant="caption" sx={{ ml: 1 }}>
+                          {msg.duration || '0:00'}s
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Typography variant="body1" sx={{ 
+                    lineHeight: 1.4,
+                    fontSize: { xs: '13px', sm: '14px', md: '15px' },
+                    fontWeight: 400,
+                    wordBreak: 'break-word'
+                  }}>
+                    {msg.message}
+                  </Typography>
+                )}
                 <Box sx={{ 
                   display: 'flex', 
                   alignItems: 'center', 
@@ -496,6 +757,7 @@ const ChatInterface = ({
           onSendMessage={handleSendMessage}
           onTypingStart={onTypingStart}
           onTypingStop={onTypingStop}
+          onVoiceRecord={handleVoiceRecord}
           isConnected={isConnected}
           darkMode={darkMode}
         />

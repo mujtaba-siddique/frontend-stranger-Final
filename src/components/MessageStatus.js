@@ -1,41 +1,43 @@
 import React from 'react';
-import { Box } from '@mui/material';
-import { Check, DoneAll, Schedule } from '@mui/icons-material';
+import { Box, Typography } from '@mui/material';
 
-const MessageStatus = ({ status, isOwn, isOnline = true }) => {
+const MessageStatus = ({ status, isOwn }) => {
   if (!isOwn) return null;
 
-  const getStatusIcon = () => {
+  const getStatusDisplay = () => {
     switch (status) {
       case 'sending':
-        return isOnline ? 
-          <Schedule sx={{ fontSize: 14, color: 'grey.500' }} /> :
-          <Schedule sx={{ fontSize: 14, color: 'error.main' }} />;
       case 'pending':
-        return isOnline ? 
-          <Schedule sx={{ fontSize: 14, color: 'grey.500' }} /> :
-          <Schedule sx={{ fontSize: 14, color: 'error.main' }} />;
+        return { icon: '⏱️', color: 'rgba(255,255,255,0.5)' }; // Clock
       case 'sent':
-        return isOnline ? 
-          <Check sx={{ fontSize: 14, color: 'grey.500' }} /> :
-          <Schedule sx={{ fontSize: 14, color: 'error.main' }} />;
+        return { icon: '✓', color: 'rgba(255,255,255,0.7)' }; // Single tick
       case 'delivered':
-        return <DoneAll sx={{ fontSize: 14, color: 'grey.500' }} />;
+        return { icon: '✓✓', color: 'rgba(255,255,255,0.7)' }; // Double tick
       case 'seen':
       case 'read':
-        return <DoneAll sx={{ fontSize: 14, color: 'primary.main' }} />;
+        return { icon: '✓✓', color: '#4ECDC4' }; // Blue double tick
       case 'failed':
       case 'network_issue':
-        return <Schedule sx={{ fontSize: 14, color: 'error.main' }} />;
+        return { icon: '❌', color: '#ff4757' }; // Red X
       default:
-        return <Schedule sx={{ fontSize: 14, color: 'error.main' }} />;
+        return { icon: '⏱️', color: 'rgba(255,255,255,0.5)' };
     }
   };
 
+  const statusDisplay = getStatusDisplay();
+
   return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', ml: 0.5 }}>
-      {getStatusIcon()}
-    </Box>
+    <Typography 
+      variant="caption" 
+      sx={{ 
+        fontSize: '11px',
+        color: statusDisplay.color,
+        fontWeight: 600,
+        ml: 0.5
+      }}
+    >
+      {statusDisplay.icon}
+    </Typography>
   );
 };
 

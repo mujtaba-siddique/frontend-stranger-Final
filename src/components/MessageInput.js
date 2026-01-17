@@ -6,11 +6,12 @@ import {
   Typography,
   Fade
 } from '@mui/material';
-import { Send, WifiOff } from '@mui/icons-material';
+import { Send, WifiOff, Mic } from '@mui/icons-material';
 
-const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, isConnected = true, darkMode = true }) => {
+const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, isConnected = true, darkMode = true, onVoiceRecord }) => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const typingTimeoutRef = useRef(null);
 
   const handleSubmit = (e) => {
@@ -212,6 +213,63 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
             }
           }}
         />
+        <IconButton
+          onPointerDown={() => {
+            if (onVoiceRecord && isConnected && !disabled) {
+              setIsRecording(true);
+              onVoiceRecord('start');
+            }
+          }}
+          onPointerUp={() => {
+            if (isRecording && onVoiceRecord) {
+              setIsRecording(false);
+              onVoiceRecord('stop');
+            }
+          }}
+          onPointerCancel={() => {
+            if (isRecording && onVoiceRecord) {
+              setIsRecording(false);
+              onVoiceRecord('stop');
+            }
+          }}
+          disabled={disabled || !isConnected}
+          sx={{ 
+            mb: { xs: 0, sm: 0.3, md: 0.5 },
+            background: isRecording 
+              ? 'linear-gradient(135deg, #f44336, #d32f2f)'
+              : 'linear-gradient(135deg, #4CAF50, #45a049)',
+            color: 'white',
+            width: { xs: 44, sm: 50, md: 56 },
+            height: { xs: 44, sm: 50, md: 56 },
+            minWidth: { xs: 44, sm: 50, md: 56 },
+            boxShadow: isRecording
+              ? '0 8px 25px rgba(244, 67, 54, 0.6), 0 0 20px rgba(244, 67, 54, 0.4)'
+              : '0 8px 25px rgba(76, 175, 80, 0.4), 0 0 20px rgba(76, 175, 80, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            animation: isRecording ? 'pulse 1s infinite' : 'none',
+            touchAction: 'none',
+            '&:hover': {
+              background: isRecording
+                ? 'linear-gradient(135deg, #d32f2f, #c62828)'
+                : 'linear-gradient(135deg, #45a049, #388e3c)',
+              boxShadow: isRecording
+                ? '0 12px 35px rgba(244, 67, 54, 0.8), 0 0 30px rgba(244, 67, 54, 0.6)'
+                : '0 12px 35px rgba(76, 175, 80, 0.6), 0 0 30px rgba(76, 175, 80, 0.4)',
+              transform: { xs: 'scale(1.02)', sm: 'translateY(-2px) scale(1.03)', md: 'translateY(-3px) scale(1.05)' }
+            },
+            '&:active': {
+              transform: { xs: 'scale(0.98)', sm: 'scale(0.98)', md: 'scale(0.95)' }
+            },
+            '&:disabled': {
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: 'rgba(255, 255, 255, 0.3)',
+              boxShadow: 'none'
+            },
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <Mic sx={{ fontSize: { xs: 18, sm: 20, md: 24 } }} />
+        </IconButton>
         <IconButton 
           type="submit" 
           disabled={!message.trim() || disabled || !isConnected}
@@ -242,6 +300,12 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
         >
           <Send sx={{ fontSize: { xs: 18, sm: 20, md: 24 } }} />
         </IconButton>
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+          }
+        `}</style>
       </Box>
     </Box>
   );
