@@ -89,22 +89,13 @@ const ChatInterface = ({
   }, [messages, userId, onMessageSeen]);
 
   const handleSendMessage = (message) => {
-    // Validate message
-    const validation = validateMessage(message);
-    if (!validation.isValid) {
-      // Show error in snackbar or alert
+    // Basic validation only
+    if (!message || typeof message !== 'string' || !message.trim()) {
       return;
     }
 
-    // Check for spam
-    const spamCheck = detectSpam(messages, userId);
-    if (spamCheck.isSpam) {
-      // Show spam error
-      return;
-    }
-
-    // Sanitize and send
-    const sanitizedMessage = sanitizeMessage(validation.message);
+    // Sanitize and send - NO LIMITS
+    const sanitizedMessage = sanitizeMessage(message.trim());
     const messageId = generateId();
     onSendMessage(sanitizedMessage, messageId);
   };
