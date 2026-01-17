@@ -368,35 +368,53 @@ const useCallManager = (userId, partnerId) => {
   }, [isSpeakerOn]);
 
   const switchCamera = useCallback(async () => {
-    if (!localStreamRef.current || callType !== 'video') return;
+    console.log('🔄 Switching camera, current:', isFrontCamera ? 'front' : 'back');
+    
+    if (!localStreamRef.current || callType !== 'video') {
+      console.log('❌ Cannot switch: no stream or not video call');
+      return;
+    }
     
     try {
+      const oldVideoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (oldVideoTrack) oldVideoTrack.stop();
+      
       const newFacingMode = isFrontCamera ? 'environment' : 'user';
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) videoTrack.stop();
+      console.log('📹 Requesting camera:', newFacingMode);
       
       const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: newFacingMode },
+        video: { 
+          facingMode: newFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
         audio: false
       });
       
       const newVideoTrack = newStream.getVideoTracks()[0];
+      console.log('✅ Got new video track');
       
       if (peerConnectionRef.current) {
         const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) await sender.replaceTrack(newVideoTrack);
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+          console.log('✅ Replaced track in peer connection');
+        }
       }
       
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      localStreamRef.current = new MediaStream([newVideoTrack, audioTrack]);
+      localStreamRef.current = new MediaStream(audioTrack ? [newVideoTrack, audioTrack] : [newVideoTrack]);
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStreamRef.current;
+        console.log('✅ Updated local video element');
       }
       
       setIsFrontCamera(!isFrontCamera);
+      console.log('✅ Camera switched to:', !isFrontCamera ? 'front' : 'back');
     } catch (error) {
       console.error('❌ Camera switch failed:', error);
+      alert('Could not switch camera. ' + error.message);
     }
   }, [isFrontCamera, callType]);
 
