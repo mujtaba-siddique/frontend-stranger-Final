@@ -46,6 +46,7 @@ const VideoCallComponent = ({
 }) => {
   const [callDuration, setCallDuration] = useState(0);
   const callStartTime = useRef(null);
+  const [isVideoSwapped, setIsVideoSwapped] = useState(false);
 
   useEffect(() => {
     let interval;
@@ -312,40 +313,33 @@ const VideoCallComponent = ({
         }}>
           {callType === 'video' ? (
             <>
-              {/* Remote Video (Partner's video - full screen) */}
+              {/* Remote Video - Partner */}
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
                 style={{
-                  width: '100%',
-                  height: '100%',
+                  position: 'absolute',
+                  width: isVideoSwapped ? '120px' : '100%',
+                  height: isVideoSwapped ? '160px' : '100%',
+                  top: isVideoSwapped ? '10px' : '0',
+                  right: isVideoSwapped ? '10px' : '0',
+                  left: isVideoSwapped ? 'auto' : '0',
                   objectFit: 'cover',
-                  background: '#1a1a1a'
+                  background: '#1a1a1a',
+                  borderRadius: isVideoSwapped ? '8px' : '0',
+                  border: isVideoSwapped ? '2px solid white' : 'none',
+                  cursor: isVideoSwapped ? 'pointer' : 'default',
+                  transition: 'all 0.3s ease',
+                  boxShadow: isVideoSwapped ? '0 4px 12px rgba(0,0,0,0.5)' : 'none',
+                  zIndex: isVideoSwapped ? 2 : 1
                 }}
+                onClick={() => isVideoSwapped && setIsVideoSwapped(!isVideoSwapped)}
+                onMouseEnter={(e) => isVideoSwapped && (e.target.style.transform = 'scale(1.05)')}
+                onMouseLeave={(e) => isVideoSwapped && (e.target.style.transform = 'scale(1)')}
               />
               
-              {isReconnecting && (
-                <Box sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  textAlign: 'center',
-                  background: 'rgba(0,0,0,0.8)',
-                  p: 3,
-                  borderRadius: 2
-                }}>
-                  <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>
-                    🔄 Reconnecting...
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-                    Please wait while we restore your connection
-                  </Typography>
-                </Box>
-              )}
-              
-              {/* Local Video (Your video - small window) */}
+              {/* Local Video - Your video */}
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -353,15 +347,23 @@ const VideoCallComponent = ({
                 muted
                 style={{
                   position: 'absolute',
-                  top: 10,
-                  right: 10,
-                  width: 120,
-                  height: 150,
+                  width: isVideoSwapped ? '100%' : '120px',
+                  height: isVideoSwapped ? '100%' : '160px',
+                  top: isVideoSwapped ? '0' : '10px',
+                  right: isVideoSwapped ? '0' : '10px',
+                  left: isVideoSwapped ? '0' : 'auto',
                   objectFit: 'cover',
-                  borderRadius: 8,
-                  border: '2px solid white',
-                  background: '#1a1a1a'
+                  background: '#1a1a1a',
+                  borderRadius: isVideoSwapped ? '0' : '8px',
+                  border: isVideoSwapped ? 'none' : '2px solid white',
+                  cursor: isVideoSwapped ? 'default' : 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: isVideoSwapped ? 'none' : '0 4px 12px rgba(0,0,0,0.5)',
+                  zIndex: isVideoSwapped ? 1 : 2
                 }}
+                onClick={() => !isVideoSwapped && setIsVideoSwapped(!isVideoSwapped)}
+                onMouseEnter={(e) => !isVideoSwapped && (e.target.style.transform = 'scale(1.05)')}
+                onMouseLeave={(e) => !isVideoSwapped && (e.target.style.transform = 'scale(1)')}
               />
             </>
           ) : (
