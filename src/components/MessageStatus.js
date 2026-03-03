@@ -8,19 +8,19 @@ const MessageStatus = ({ status, isOwn }) => {
     switch (status) {
       case 'sending':
       case 'pending':
-        return { icon: '⏱️', color: 'rgba(255,255,255,0.5)' }; // Clock
+        return { icon: '🕐', color: 'inherit', opacity: 0.45 };
       case 'sent':
-        return { icon: '✓', color: 'rgba(255,255,255,0.7)' }; // Single tick
+        return { icon: '✓', color: 'inherit', opacity: 0.5 };
       case 'delivered':
-        return { icon: '✓✓', color: 'rgba(255,255,255,0.7)' }; // Double tick
+        return { icon: '✓✓', color: 'inherit', opacity: 0.5 };
       case 'seen':
       case 'read':
-        return { icon: '✓✓', color: '#4ECDC4' }; // Blue double tick
+        return { icon: '✓✓', color: '#53bdeb', opacity: 1 };
       case 'failed':
       case 'network_issue':
-        return { icon: '❌', color: '#ff4757' }; // Red X
+        return { icon: '!', color: '#ef4444', opacity: 1 };
       default:
-        return { icon: '⏱️', color: 'rgba(255,255,255,0.5)' };
+        return { icon: '🕐', color: 'inherit', opacity: 0.45 };
     }
   };
 
@@ -28,12 +28,15 @@ const MessageStatus = ({ status, isOwn }) => {
 
   return (
     <Typography
-      variant="caption"
+      component="span"
       sx={{
-        fontSize: '11px',
+        fontSize: '0.65rem',
         color: statusDisplay.color,
+        opacity: statusDisplay.opacity,
         fontWeight: 600,
-        ml: 0.5
+        ml: 0.3,
+        lineHeight: 1,
+        letterSpacing: '-0.5px'
       }}
     >
       {statusDisplay.icon}

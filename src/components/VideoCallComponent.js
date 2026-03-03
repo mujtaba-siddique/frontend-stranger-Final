@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   IconButton,
@@ -47,7 +47,42 @@ const VideoCallComponent = ({
   callDuration = 0
 }) => {
   const [isVideoSwapped, setIsVideoSwapped] = useState(false);
+  const [showControls, setShowControls] = useState(true);
   const ringtoneRef = useRef(null);
+  const controlsTimerRef = useRef(null);
+
+  // === AUTO-HIDE CONTROLS ===
+  const resetControlsTimer = useCallback(() => {
+    if (controlsTimerRef.current) {
+      clearTimeout(controlsTimerRef.current);
+    }
+    setShowControls(true);
+    controlsTimerRef.current = setTimeout(() => {
+      setShowControls(false);
+    }, 2000);
+  }, []);
+
+  // Start auto-hide timer when call becomes active
+  useEffect(() => {
+    if (isCallActive) {
+      resetControlsTimer();
+    }
+    return () => {
+      if (controlsTimerRef.current) {
+        clearTimeout(controlsTimerRef.current);
+      }
+    };
+  }, [isCallActive, resetControlsTimer]);
+
+  const handleScreenTap = () => {
+    resetControlsTimer();
+  };
+
+  const handleControlClick = (handler) => (e) => {
+    e.stopPropagation();
+    resetControlsTimer();
+    if (handler) handler();
+  };
 
   // === RINGTONE SYSTEM ===
   useEffect(() => {
@@ -393,15 +428,19 @@ const VideoCallComponent = ({
         </Box>
 
         {/* Main Content Area */}
-        <Box sx={{
-          flex: 1,
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '100%',
-          height: '100%'
-        }}>
+        <Box
+          onClick={handleScreenTap}
+          sx={{
+            flex: 1,
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            height: '100%',
+            cursor: 'pointer'
+          }}
+        >
           {callType === 'video' ? (
             <>
               {/* Remote Video (full screen) */}
@@ -423,7 +462,8 @@ const VideoCallComponent = ({
                   cursor: isVideoSwapped ? 'pointer' : 'default',
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   boxShadow: isVideoSwapped ? '0 8px 32px rgba(0,0,0,0.6)' : 'none',
-                  zIndex: isVideoSwapped ? 3 : 1
+                  zIndex: isVideoSwapped ? 3 : 1,
+                  transform: 'scaleX(-1)'
                 }}
                 onClick={() => isVideoSwapped && setIsVideoSwapped(false)}
               />
@@ -448,7 +488,8 @@ const VideoCallComponent = ({
                   cursor: isVideoSwapped ? 'default' : 'pointer',
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                   boxShadow: isVideoSwapped ? 'none' : '0 8px 32px rgba(0,0,0,0.6)',
-                  zIndex: isVideoSwapped ? 1 : 3
+                  zIndex: isVideoSwapped ? 1 : 3,
+                  transform: 'scaleX(-1)'
                 }}
                 onClick={() => !isVideoSwapped && setIsVideoSwapped(true)}
               />
@@ -554,26 +595,34 @@ const VideoCallComponent = ({
           )}
         </Box>
 
-        {/* ===== BOTTOM CONTROLS ===== */}
-        <Box sx={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          background: 'linear-gradient(0deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 70%, transparent 100%)',
-          pt: 5,
-          pb: 4,
-          px: 2,
-          display: 'flex',
-          justifyContent: 'center',
-          gap: { xs: 2, sm: 3 }
-        }}>
+        {/* ===== CONTROLS (auto-hide) ===== */}
+        <Box
+          onClick={(e) => e.stopPropagation()}
+          sx={{
+            position: 'absolute',
+            bottom: '15%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 10,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(16px)',
+            borderRadius: '40px',
+            px: 3,
+            py: 1.5,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: { xs: 1.5, sm: 2.5 },
+            opacity: showControls ? 1 : 0,
+            pointerEvents: showControls ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease'
+          }}
+        >
           {/* Video Toggle */}
           {callType === 'video' && (
             <Box sx={{ textAlign: 'center' }}>
               <IconButton
-                onClick={onToggleVideo}
+                onClick={handleControlClick(onToggleVideo)}
                 sx={{
                   width: 52, height: 52,
                   background: isVideoEnabled ? 'rgba(255,255,255,0.15)' : 'rgba(255, 71, 87, 0.8)',
@@ -594,7 +643,7 @@ const VideoCallComponent = ({
           {/* Mic Toggle */}
           <Box sx={{ textAlign: 'center' }}>
             <IconButton
-              onClick={onToggleAudio}
+              onClick={handleControlClick(onToggleAudio)}
               sx={{
                 width: 52, height: 52,
                 background: isAudioEnabled ? 'rgba(255,255,255,0.15)' : 'rgba(255, 71, 87, 0.8)',
@@ -615,7 +664,7 @@ const VideoCallComponent = ({
           {callType === 'audio' && (
             <Box sx={{ textAlign: 'center' }}>
               <IconButton
-                onClick={onToggleSpeaker}
+                onClick={handleControlClick(onToggleSpeaker)}
                 sx={{
                   width: 52, height: 52,
                   background: isSpeakerOn ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.15)',
@@ -637,7 +686,7 @@ const VideoCallComponent = ({
           {callType === 'video' && (
             <Box sx={{ textAlign: 'center' }}>
               <IconButton
-                onClick={onSwitchCamera}
+                onClick={handleControlClick(onSwitchCamera)}
                 sx={{
                   width: 52, height: 52,
                   background: 'rgba(255,255,255,0.15)',
@@ -658,7 +707,7 @@ const VideoCallComponent = ({
           {/* End Call */}
           <Box sx={{ textAlign: 'center' }}>
             <IconButton
-              onClick={onEndCall}
+              onClick={handleControlClick(onEndCall)}
               sx={{
                 width: 60, height: 60,
                 background: 'linear-gradient(135deg, #ff4757, #c0392b)',

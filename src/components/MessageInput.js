@@ -6,7 +6,7 @@ import {
   Typography,
   Fade
 } from '@mui/material';
-import { Send, WifiOff, Mic } from '@mui/icons-material';
+import { Send, WifiOff, Mic, EmojiEmotions } from '@mui/icons-material';
 
 const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, isConnected = true, darkMode = true, onVoiceRecord }) => {
   const [message, setMessage] = useState('');
@@ -39,12 +39,12 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
       setIsTyping(true);
       onTypingStart();
     }
-    
+
     // Reset timeout - user is actively typing
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    
+
     // Auto-stop after 1 second of no keystrokes
     typingTimeoutRef.current = setTimeout(() => {
       if (isTyping && onTypingStop) {
@@ -52,7 +52,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
         setIsTyping(false);
         onTypingStop();
       }
-      
+
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
@@ -65,7 +65,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
   const handleChange = (e) => {
     const newValue = e.target.value;
     setMessage(newValue);
-    
+
     // Trigger typing on any text change
     if (isConnected) {
       if (newValue.length > 0) {
@@ -82,17 +82,17 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
       }
     }
   };
-  
+
   // Handle keydown for real-time typing detection
   const handleKeyDown = (e) => {
     // Ignore navigation keys that don't change text
     const navigationKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Tab'];
-    
+
     if (!navigationKeys.includes(e.key) && isConnected && message.length >= 0) {
       handleStartTyping();
     }
   };
-  
+
   // Stop typing when user leaves input
   const handleBlur = () => {
     if (isTyping && onTypingStop) {
@@ -111,7 +111,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
       handleSubmit(e);
     }
   };
-  
+
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
@@ -120,190 +120,234 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
     };
   }, []);
 
-
+  const hasText = message.trim().length > 0;
 
   return (
     <Box>
       {/* Connection Status */}
       <Fade in={!isConnected}>
-        <Box sx={{ 
-          display: 'flex', 
-          alignItems: 'center', 
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
-          p: 1,
-          backgroundColor: 'error.light',
-          color: 'error.contrastText'
+          py: 0.8,
+          px: 2,
+          background: darkMode ? 'rgba(255,65,108,0.2)' : '#fee2e2',
+          gap: 1
         }}>
-          <WifiOff sx={{ mr: 1, fontSize: 16 }} />
-          <Typography variant="caption">
-            Connection lost. Trying to reconnect...
+          <WifiOff sx={{ fontSize: 16, color: '#ef4444' }} />
+          <Typography sx={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
+            Connection lost. Reconnecting...
           </Typography>
         </Box>
       </Fade>
-      
-      <Box 
-        component="form" 
-        onSubmit={handleSubmit}
-        sx={{ 
-          p: { xs: 1.5, sm: 2.5, md: 3 }, 
-          display: 'flex', 
+
+      <Box
+        sx={{
+          px: { xs: 1, sm: 1.5 },
+          py: { xs: 0.8, sm: 1 },
+          display: 'flex',
           alignItems: 'flex-end',
-          gap: { xs: 1.5, sm: 2, md: 2.5 },
+          gap: { xs: 0.8, sm: 1 },
           background: 'transparent',
-          pb: { xs: 'env(safe-area-inset-bottom, 1.5rem)', sm: 2.5, md: 3 }
+          pb: { xs: 'max(0.8rem, env(safe-area-inset-bottom))', sm: '1rem' }
         }}
       >
-        <TextField
-          fullWidth
-          multiline
-          maxRows={4}
-          placeholder={isConnected ? "🚀 Type something amazing..." : "🔄 Reconnecting..."}
-          value={message}
-          onChange={handleChange}
-          onKeyPress={handleKeyPress}
-          onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          disabled={disabled || !isConnected}
-          variant="outlined"
-          inputProps={{
-            style: { fontSize: window.innerWidth < 600 ? '16px' : '15px' },
-            autoComplete: 'off',
-            autoCorrect: 'off',
-            autoCapitalize: 'sentences'
-          }}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: { xs: 4, sm: 5, md: 6 },
-              background: darkMode 
-                ? 'rgba(255, 255, 255, 0.1)'
-                : 'rgba(255, 255, 255, 0.9)',
-              backdropFilter: 'blur(20px)',
-              border: darkMode 
-                ? '1px solid rgba(255, 255, 255, 0.2)'
-                : '1px solid rgba(0, 0, 0, 0.1)',
-              color: darkMode ? 'white' : '#1e293b',
-              fontSize: { xs: '16px', sm: '15px', md: '16px' },
-              minHeight: { xs: '44px', sm: '48px', md: '52px' },
+        {/* Input Container */}
+        <Box sx={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'flex-end',
+          background: darkMode
+            ? 'linear-gradient(135deg, #2a2d3e 0%, #252838 100%)'
+            : 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+          borderRadius: '28px',
+          border: darkMode
+            ? '1.5px solid rgba(255,255,255,0.08)'
+            : '1.5px solid rgba(0,0,0,0.1)',
+          boxShadow: darkMode
+            ? '0 2px 8px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.05)'
+            : '0 2px 8px rgba(0,0,0,0.08), inset 0 1px 2px rgba(255,255,255,0.8)',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease',
+          '&:focus-within': {
+            borderColor: darkMode ? 'rgba(102,126,234,0.5)' : 'rgba(0,168,132,0.4)',
+            boxShadow: darkMode
+              ? '0 4px 16px rgba(102,126,234,0.2), inset 0 1px 2px rgba(255,255,255,0.05)'
+              : '0 4px 16px rgba(0,168,132,0.15), inset 0 1px 2px rgba(255,255,255,0.8)',
+            transform: 'translateY(-1px)'
+          }
+        }}>
+          {/* Emoji button */}
+          <IconButton
+            size="small"
+            sx={{
+              alignSelf: 'flex-end',
+              color: darkMode ? 'rgba(255,255,255,0.5)' : '#54656f',
+              width: 40,
+              height: 40,
+              ml: 0.6,
+              mb: 0.4,
+              transition: 'all 0.2s',
               '&:hover': {
-                border: darkMode 
-                  ? '1px solid rgba(255, 255, 255, 0.3)'
-                  : '1px solid rgba(0, 0, 0, 0.2)',
-                boxShadow: darkMode 
-                  ? '0 8px 32px rgba(0, 0, 0, 0.3)'
-                  : '0 8px 32px rgba(0, 0, 0, 0.1)'
-              },
-              '&.Mui-focused': {
-                border: '1px solid rgba(102, 126, 234, 0.6)',
-                boxShadow: '0 0 20px rgba(102, 126, 234, 0.3), 0 8px 32px rgba(0, 0, 0, 0.3)'
-              },
-              '& fieldset': {
-                border: 'none'
+                color: darkMode ? 'rgba(255,255,255,0.8)' : '#00a884',
+                background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,168,132,0.08)',
+                transform: 'scale(1.1)'
               }
-            },
-            '& .MuiOutlinedInput-input': {
-              fontSize: { xs: '16px', sm: '15px', md: '16px' },
-              padding: { xs: '12px 16px', sm: '14px 18px', md: '16px 20px' },
-              color: darkMode ? 'white' : '#1e293b',
-              '&::placeholder': {
-                color: darkMode 
-                  ? 'rgba(255, 255, 255, 0.6)'
-                  : 'rgba(30, 41, 59, 0.6)',
-                fontSize: { xs: '14px', sm: '15px', md: '16px' }
+            }}
+          >
+            <EmojiEmotions sx={{ fontSize: 23 }} />
+          </IconButton>
+
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            placeholder={isConnected ? "Message" : "Reconnecting..."}
+            value={message}
+            onChange={handleChange}
+            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            disabled={disabled || !isConnected}
+            variant="standard"
+            inputProps={{
+              style: { fontSize: window.innerWidth < 600 ? '16px' : '15px' },
+              autoComplete: 'off',
+              autoCorrect: 'off',
+              autoCapitalize: 'sentences'
+            }}
+            sx={{
+              flex: 1,
+              '& .MuiInput-root': {
+                '&:before, &:after': { display: 'none' },
+                padding: 0
+              },
+              '& .MuiInputBase-input': {
+                fontSize: { xs: '0.92rem', sm: '0.95rem' },
+                py: { xs: '10px', sm: '11px' },
+                pr: 1,
+                color: darkMode ? '#e4e6eb' : '#111b21',
+                lineHeight: 1.4,
+                '&::placeholder': {
+                  color: darkMode ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.4)',
+                  fontSize: { xs: '0.88rem', sm: '0.92rem' },
+                  opacity: 1
+                }
               }
-            }
-          }}
-        />
-        <IconButton
-          onPointerDown={() => {
-            if (onVoiceRecord && isConnected && !disabled) {
-              setIsRecording(true);
-              onVoiceRecord('start');
-            }
-          }}
-          onPointerUp={() => {
-            if (isRecording && onVoiceRecord) {
-              setIsRecording(false);
-              onVoiceRecord('stop');
-            }
-          }}
-          onPointerCancel={() => {
-            if (isRecording && onVoiceRecord) {
-              setIsRecording(false);
-              onVoiceRecord('stop');
-            }
-          }}
-          disabled={disabled || !isConnected}
-          sx={{ 
-            mb: { xs: 0, sm: 0.3, md: 0.5 },
-            background: isRecording 
-              ? 'linear-gradient(135deg, #f44336, #d32f2f)'
-              : 'linear-gradient(135deg, #4CAF50, #45a049)',
-            color: 'white',
-            width: { xs: 44, sm: 50, md: 56 },
-            height: { xs: 44, sm: 50, md: 56 },
-            minWidth: { xs: 44, sm: 50, md: 56 },
-            boxShadow: isRecording
-              ? '0 8px 25px rgba(244, 67, 54, 0.6), 0 0 20px rgba(244, 67, 54, 0.4)'
-              : '0 8px 25px rgba(76, 175, 80, 0.4), 0 0 20px rgba(76, 175, 80, 0.2)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            animation: isRecording ? 'pulse 1s infinite' : 'none',
-            touchAction: 'none',
-            '&:hover': {
+            }}
+          />
+        </Box>
+
+        {/* Voice / Send Button */}
+        {hasText ? (
+          <IconButton
+            onClick={handleSubmit}
+            disabled={!message.trim() || disabled || !isConnected}
+            sx={{
+              width: { xs: 46, sm: 50 },
+              height: { xs: 46, sm: 50 },
+              minWidth: { xs: 46, sm: 50 },
+              background: darkMode
+                ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                : 'linear-gradient(135deg, #00a884 0%, #008069 100%)',
+              color: 'white',
+              boxShadow: darkMode
+                ? '0 4px 16px rgba(102,126,234,0.4)'
+                : '0 4px 16px rgba(0,168,132,0.35)',
+              '&:hover': {
+                background: darkMode
+                  ? 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)'
+                  : 'linear-gradient(135deg, #008f6f 0%, #007055 100%)',
+                transform: 'scale(1.08)',
+                boxShadow: darkMode
+                  ? '0 6px 20px rgba(102,126,234,0.5)'
+                  : '0 6px 20px rgba(0,168,132,0.45)'
+              },
+              '&:active': {
+                transform: 'scale(0.95)'
+              },
+              '&:disabled': {
+                background: darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                color: darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
+                boxShadow: 'none'
+              },
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Send sx={{ fontSize: { xs: 20, sm: 22 }, ml: '2px' }} />
+          </IconButton>
+        ) : (
+          <IconButton
+            onPointerDown={() => {
+              if (onVoiceRecord && isConnected && !disabled) {
+                setIsRecording(true);
+                onVoiceRecord('start');
+              }
+            }}
+            onPointerUp={() => {
+              if (isRecording && onVoiceRecord) {
+                setIsRecording(false);
+                onVoiceRecord('stop');
+              }
+            }}
+            onPointerCancel={() => {
+              if (isRecording && onVoiceRecord) {
+                setIsRecording(false);
+                onVoiceRecord('stop');
+              }
+            }}
+            disabled={disabled || !isConnected}
+            sx={{
+              width: { xs: 46, sm: 50 },
+              height: { xs: 46, sm: 50 },
+              minWidth: { xs: 46, sm: 50 },
               background: isRecording
-                ? 'linear-gradient(135deg, #d32f2f, #c62828)'
-                : 'linear-gradient(135deg, #45a049, #388e3c)',
+                ? 'linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%)'
+                : darkMode
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                  : 'linear-gradient(135deg, #00a884 0%, #008069 100%)',
+              color: 'white',
               boxShadow: isRecording
-                ? '0 12px 35px rgba(244, 67, 54, 0.8), 0 0 30px rgba(244, 67, 54, 0.6)'
-                : '0 12px 35px rgba(76, 175, 80, 0.6), 0 0 30px rgba(76, 175, 80, 0.4)',
-              transform: { xs: 'scale(1.02)', sm: 'translateY(-2px) scale(1.03)', md: 'translateY(-3px) scale(1.05)' }
-            },
-            '&:active': {
-              transform: { xs: 'scale(0.98)', sm: 'scale(0.98)', md: 'scale(0.95)' }
-            },
-            '&:disabled': {
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: 'rgba(255, 255, 255, 0.3)',
-              boxShadow: 'none'
-            },
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <Mic sx={{ fontSize: { xs: 18, sm: 20, md: 24 } }} />
-        </IconButton>
-        <IconButton 
-          type="submit" 
-          disabled={!message.trim() || disabled || !isConnected}
-          sx={{ 
-            mb: { xs: 0, sm: 0.3, md: 0.5 },
-            background: 'linear-gradient(135deg, #ff6b6b, #ee5a24)',
-            color: 'white',
-            width: { xs: 44, sm: 50, md: 56 },
-            height: { xs: 44, sm: 50, md: 56 },
-            minWidth: { xs: 44, sm: 50, md: 56 },
-            boxShadow: '0 8px 25px rgba(255, 107, 107, 0.4), 0 0 20px rgba(255, 107, 107, 0.2)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #ee5a24, #d63031)',
-              boxShadow: '0 12px 35px rgba(255, 107, 107, 0.6), 0 0 30px rgba(255, 107, 107, 0.4)',
-              transform: { xs: 'scale(1.02)', sm: 'translateY(-2px) scale(1.03)', md: 'translateY(-3px) scale(1.05)' }
-            },
-            '&:active': {
-              transform: { xs: 'scale(0.98)', sm: 'scale(0.98)', md: 'scale(0.95)' }
-            },
-            '&:disabled': {
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: 'rgba(255, 255, 255, 0.3)',
-              boxShadow: 'none'
-            },
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <Send sx={{ fontSize: { xs: 18, sm: 20, md: 24 } }} />
-        </IconButton>
+                ? '0 4px 20px rgba(255,65,108,0.6)'
+                : darkMode
+                  ? '0 4px 16px rgba(102,126,234,0.4)'
+                  : '0 4px 16px rgba(0,168,132,0.35)',
+              animation: isRecording ? 'recPulse 1.2s infinite' : 'none',
+              touchAction: 'none',
+              '&:hover': {
+                transform: 'scale(1.08)',
+                boxShadow: isRecording
+                  ? '0 6px 24px rgba(255,65,108,0.7)'
+                  : darkMode
+                    ? '0 6px 20px rgba(102,126,234,0.5)'
+                    : '0 6px 20px rgba(0,168,132,0.45)'
+              },
+              '&:active': {
+                transform: 'scale(0.95)'
+              },
+              '&:disabled': {
+                background: darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                color: darkMode ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)',
+                boxShadow: 'none'
+              },
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Mic sx={{ fontSize: { xs: 21, sm: 23 } }} />
+          </IconButton>
+        )}
+
         <style>{`
-          @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+          @keyframes recPulse {
+            0%, 100% { 
+              box-shadow: 0 4px 20px rgba(255,65,108,0.6);
+              transform: scale(1);
+            }
+            50% { 
+              box-shadow: 0 6px 28px rgba(255,65,108,0.9);
+              transform: scale(1.05);
+            }
           }
         `}</style>
       </Box>

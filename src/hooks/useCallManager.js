@@ -23,7 +23,6 @@ const useCallManager = (userId, partnerId) => {
   const remoteStreamRef = useRef(null);
   const incomingCallDataRef = useRef(null);
   const callStateRef = useRef(null);
-  const listenersInitializedRef = useRef(false);
   const qualityCheckIntervalRef = useRef(null);
   const callTimeoutRef = useRef(null);
   const callActiveRef = useRef(false);
