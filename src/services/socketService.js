@@ -15,12 +15,12 @@ class SocketService {
         this.socket.disconnect();
         this.socket = null;
       }
-      
+
       const socketUrl = process.env.REACT_APP_SOCKET_URL;
       if (!socketUrl) {
         throw new Error('REACT_APP_SOCKET_URL not configured');
       }
-      
+
       this.socket = io(socketUrl, {
         transports: ['websocket', 'polling'],
         forceNew: true,
@@ -30,7 +30,7 @@ class SocketService {
         reconnectionDelayMax: 3000,
         timeout: 20000
       });
-      
+
       this.socket.on('connect', () => {
         this.isConnected = true;
         console.log('✅ SOCKET CONNECTED:', this.socket.id);
@@ -76,27 +76,27 @@ class SocketService {
     }
   }
 
-  sendMessage(message) {
+  sendMessage(message, messageId) {
     if (this.socket && this.isConnected && message.trim()) {
-      console.log('📤 SENDING MESSAGE:', { message });
-      this.socket.emit('send-message', { message });
+      console.log('📤 SENDING MESSAGE:', { message, messageId });
+      this.socket.emit('send-message', { message, messageId });
     } else {
       console.error('❌ Cannot send message - socket not connected or empty message');
     }
   }
-  
+
   startTyping() {
     if (this.socket && this.isConnected) {
       this.socket.emit('typing-start');
     }
   }
-  
+
   stopTyping() {
     if (this.socket && this.isConnected) {
       this.socket.emit('typing-stop');
     }
   }
-  
+
   markMessageSeen(messageId) {
     if (this.socket && this.isConnected) {
       this.socket.emit('message-seen', { messageId });
@@ -156,31 +156,31 @@ class SocketService {
       this.socket.on('partner-typing', callback);
     }
   }
-  
+
   onMessageDelivered(callback) {
     if (this.socket) {
       this.socket.on('message-delivered', callback);
     }
   }
-  
+
   onMessageSeenByPartner(callback) {
     if (this.socket) {
       this.socket.on('message-seen-by-partner', callback);
     }
   }
-  
+
   onMessageStatusUpdate(callback) {
     if (this.socket) {
       this.socket.on('message-status-update', callback);
     }
   }
-  
+
   onNetworkIssue(callback) {
     if (this.socket) {
       this.socket.on('network-issue', callback);
     }
   }
-  
+
   onMessageFailed(callback) {
     if (this.socket) {
       this.socket.on('message-failed', callback);
@@ -192,19 +192,19 @@ class SocketService {
       this.socket.on('error', callback);
     }
   }
-  
+
   onEnableEndChat(callback) {
     if (this.socket) {
       this.socket.on('enable-end-chat', callback);
     }
   }
-  
+
   onSessionTimeout(callback) {
     if (this.socket) {
       this.socket.on('session-timeout', callback);
     }
   }
-  
+
   onInactivityWarning(callback) {
     if (this.socket) {
       this.socket.on('inactivity-warning', callback);
@@ -304,18 +304,21 @@ class SocketService {
 
   onCallFailed(callback) {
     if (this.socket) {
+      this.socket.off('call-failed');
       this.socket.on('call-failed', callback);
     }
   }
 
   onCallReconnect(callback) {
     if (this.socket) {
+      this.socket.off('call-reconnect');
       this.socket.on('call-reconnect', callback);
     }
   }
 
   onCallTimeout(callback) {
     if (this.socket) {
+      this.socket.off('call-timeout');
       this.socket.on('call-timeout', callback);
     }
   }
@@ -326,23 +329,23 @@ class SocketService {
       this.socket.removeAllListeners();
     }
   }
-  
+
   // Clean method to remove specific listeners
   removeEventListeners() {
     if (this.socket) {
       const events = [
         'user-created', 'matched', 'waiting', 'new-message', 'message-sent',
-        'chat-ended', 'partner-typing', 'error', 'message-delivered', 
-        'message-seen-by-partner', 'enable-end-chat', 'session-timeout', 
-        'inactivity-warning', 'call-offer', 'call-answer', 'ice-candidate', 
+        'chat-ended', 'partner-typing', 'error', 'message-delivered',
+        'message-seen-by-partner', 'enable-end-chat', 'session-timeout',
+        'inactivity-warning', 'call-offer', 'call-answer', 'ice-candidate',
         'call-ended', 'call-failed', 'partner-reconnected', 'partner-connection-lost',
         'call-connection-lost', 'call-reconnect-needed', 'call-reconnect', 'call-timeout'
       ];
-      
+
       events.forEach(event => {
         this.socket.off(event);
       });
-      
+
       console.log('🧽 Removed specific event listeners');
     }
   }

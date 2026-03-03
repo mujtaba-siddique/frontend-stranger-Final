@@ -97,11 +97,11 @@ function App() {
       showNotification('API URL not configured', 'error');
       return;
     }
-    
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-      
+
       const response = await fetch(`${apiUrl}/api/users/profile`, {
         method: 'POST',
         headers: {
@@ -113,10 +113,10 @@ function App() {
         body: JSON.stringify(profileData),
         signal: controller.signal
       });
-      
+
       clearTimeout(timeoutId);
       console.log('Response status:', response.status);
-      
+
       if (response.ok) {
         const userData = await response.json();
         console.log('Profile created:', userData);
@@ -146,22 +146,22 @@ function App() {
   const handleConnect = () => {
     handleConnectWithProfile(userProfile);
   };
-  
+
   const handleConnectWithProfile = (profileData, skipClearMessages = false) => {
     setState(STATES.CONNECTING);
     if (!skipClearMessages) {
       setMessages([]);
     }
-    
+
     console.log('🚀 Connecting with profile:', profileData);
-    
+
     const socket = socketService.connect();
-    
+
     socket.on('connect', () => {
       console.log('✅ Socket connected, now joining chat');
       socketService.joinChat(profileData?.id);
     });
-    
+
     socketService.onUserCreated((data) => {
       console.log('User created:', data.userId);
       setUserId(data.userId);
@@ -172,14 +172,14 @@ function App() {
       setState(STATES.CHATTING);
       setPartnerId(data.partnerId);
       setSessionId(data.sessionId);
-      
+
       // Save session to localStorage
       localStorage.setItem('chatSession', JSON.stringify({
         partnerId: data.partnerId,
         sessionId: data.sessionId,
         timestamp: Date.now()
       }));
-      
+
       if (isReconnecting) {
         showNotification('Reconnected successfully!', 'success');
         setIsReconnecting(false);
@@ -201,12 +201,12 @@ function App() {
         localStorage.setItem('chatMessages', JSON.stringify(updated));
         return updated;
       });
-      
+
       if (document.hidden) {
         notificationService.showMessageNotification(message.message);
         notificationService.playNotificationSound();
       }
-      
+
       setTimeout(() => {
         socketService.markMessageSeen(message.id);
       }, 500);
@@ -227,11 +227,14 @@ function App() {
       setMessages([]);
       setPartnerId(null);
       setSessionId(null);
-      
+
+      // FIX: Auto-end call when chat ends
+      callManager.endCall();
+
       // Clear session and messages from localStorage (intentional end)
       localStorage.removeItem('chatSession');
       localStorage.removeItem('chatMessages');
-      
+
       if (userProfile) {
         showNotification('🔄 Finding you a new stranger...', 'info');
         setTimeout(() => {
@@ -248,44 +251,44 @@ function App() {
     socketService.onError((error) => {
       showNotification(error.message, 'error');
     });
-    
+
     socketService.onMessageDelivered((data) => {
       console.log('✅ Message delivered:', data.messageId);
       setMessages(prev => {
-        const updated = prev.map(msg => 
+        const updated = prev.map(msg =>
           msg.id === data.messageId ? { ...msg, status: 'delivered' } : msg
         );
         localStorage.setItem('chatMessages', JSON.stringify(updated));
         return updated;
       });
     });
-    
+
     socketService.onMessageSeenByPartner((data) => {
       console.log('👁️ Message seen:', data.messageId);
       setMessages(prev => {
-        const updated = prev.map(msg => 
+        const updated = prev.map(msg =>
           msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
         );
         localStorage.setItem('chatMessages', JSON.stringify(updated));
         return updated;
       });
     });
-    
+
     socketService.onMessageStatusUpdate((data) => {
       console.log('📊 Message status update:', data.messageId, 'status:', data.status);
       setMessages(prev => {
-        const updated = prev.map(msg => 
+        const updated = prev.map(msg =>
           msg.id === data.messageId ? { ...msg, status: data.status } : msg
         );
         localStorage.setItem('chatMessages', JSON.stringify(updated));
         return updated;
       });
     });
-    
+
     socketService.onMessageFailed((data) => {
       console.log('❌ Message failed:', data.messageId, 'error:', data.error);
       setMessages(prev => {
-        const updated = prev.map(msg => 
+        const updated = prev.map(msg =>
           msg.id === data.messageId ? { ...msg, status: 'failed' } : msg
         );
         localStorage.setItem('chatMessages', JSON.stringify(updated));
@@ -293,13 +296,13 @@ function App() {
       });
       showNotification(data.error, 'error');
     });
-    
+
     socketService.onEnableEndChat(() => {
       console.log('🔓 End chat button enabled');
     });
-    
+
     callManager.initializeCallListeners();
-    
+
     socketService.onSessionTimeout((data) => {
       console.log('⏰ Session timeout:', data.reason);
       setSessionTimeoutOpen(true);
@@ -317,17 +320,17 @@ function App() {
   const handleSendMessage = (message, messageId) => {
     socketService.sendMessage(message, messageId);
   };
-  
+
   const handleTypingStart = () => {
     console.log('📤 APP: handleTypingStart called');
     socketService.startTyping();
   };
-  
+
   const handleTypingStop = () => {
     console.log('📤 APP: handleTypingStop called');
     socketService.stopTyping();
   };
-  
+
   const handleMessageSeen = (messageId) => {
     socketService.markMessageSeen(messageId);
   };
@@ -336,6 +339,8 @@ function App() {
     // Mark as intentional end - clear everything
     localStorage.removeItem('chatSession');
     localStorage.removeItem('chatMessages');
+    // FIX: Auto-end call when chat ends
+    callManager.endCall();
     socketService.endChat();
   };
 
@@ -353,11 +358,11 @@ function App() {
   };
 
 
-  
+
   const handleSessionTimeoutClose = () => {
     setSessionTimeoutOpen(false);
   };
-  
+
   const handleFindNewStranger = () => {
     setSessionTimeoutOpen(false);
     if (userProfile) {
@@ -371,11 +376,11 @@ function App() {
     // Auto-reconnect on page load if session exists (only once on mount)
     const savedSession = localStorage.getItem('chatSession');
     const savedMessages = localStorage.getItem('chatMessages');
-    
+
     if (savedSession && userProfile) {
       console.log('🔄 Auto-reconnecting to previous session...');
       setIsReconnecting(true);
-      
+
       // Restore messages from localStorage
       if (savedMessages) {
         try {
@@ -386,10 +391,11 @@ function App() {
           console.error('Failed to parse messages:', e);
         }
       }
-      
+
       setState(STATES.CONNECTING);
       handleConnectWithProfile(userProfile, true); // Don't clear messages
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run only once on mount
 
   useEffect(() => {
@@ -400,9 +406,9 @@ function App() {
         e.returnValue = '';
       }
     };
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
@@ -418,20 +424,20 @@ function App() {
     switch (state) {
       case STATES.LANDING:
         return (
-          <LandingPage 
-            onStartChat={handleStartChat} 
-            darkMode={darkMode} 
-            onToggleDarkMode={toggleDarkMode} 
+          <LandingPage
+            onStartChat={handleStartChat}
+            darkMode={darkMode}
+            onToggleDarkMode={toggleDarkMode}
           />
         );
 
       case STATES.PROFILE_SETUP:
         return (
           <>
-            <LandingPage 
-              onStartChat={handleStartChat} 
-              darkMode={darkMode} 
-              onToggleDarkMode={toggleDarkMode} 
+            <LandingPage
+              onStartChat={handleStartChat}
+              darkMode={darkMode}
+              onToggleDarkMode={toggleDarkMode}
             />
             <UserProfileModal
               open={true}
@@ -465,7 +471,7 @@ function App() {
 
       case STATES.CONNECTING:
         return (
-          <WaitingRoom 
+          <WaitingRoom
             onCancel={() => {
               socketService.disconnect();
               setState(STATES.LANDING);
@@ -481,7 +487,7 @@ function App() {
 
       case STATES.WAITING:
         return (
-          <WaitingRoom 
+          <WaitingRoom
             onCancel={() => {
               socketService.disconnect();
               setState(STATES.LANDING);
@@ -511,12 +517,14 @@ function App() {
               darkMode={darkMode}
               onToggleDarkMode={toggleDarkMode}
               socket={socketService.socket}
+              callManager={callManager}
             />
-            
+
             <VideoCallComponent
               isCallActive={callManager.isCallActive}
               callType={callManager.callType}
               isIncoming={callManager.isIncoming}
+              isRinging={callManager.isRinging}
               callerName={callManager.callerName}
               onAcceptCall={callManager.acceptCall}
               onRejectCall={callManager.rejectCall}
@@ -534,6 +542,8 @@ function App() {
               localAudioRef={callManager.localAudioRef}
               remoteAudioRef={callManager.remoteAudioRef}
               darkMode={darkMode}
+              callQuality={callManager.callQuality}
+              callDuration={callManager.callDuration}
             />
           </>
         );
@@ -546,51 +556,51 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box sx={{ minHeight: '100vh', backgroundColor: state === STATES.LANDING ? 'transparent' : 'background.default' }}>
-        {state === STATES.LANDING ? (
-          renderContent()
-        ) : state === STATES.CHATTING ? (
-          renderContent()
-        ) : (
-          <Container maxWidth="md" sx={{ py: 4 }}>
-            {renderContent()}
-            
-            {state !== STATES.DISCONNECTED && (
-              <Box sx={{ textAlign: 'center', mt: 4 }}>
-                <Button
-                  variant="outlined"
-                  startIcon={<Refresh />}
-                  onClick={handleDisconnect}
-                >
-                  Back to Home
-                </Button>
-              </Box>
-            )}
-          </Container>
-        )}
-        
-        <Snackbar
-          open={notification.open}
-          autoHideDuration={4000}
-          onClose={() => setNotification({ ...notification, open: false })}
-        >
-          <Alert 
-            severity={notification.severity}
+        <CssBaseline />
+        <Box sx={{ minHeight: '100vh', backgroundColor: state === STATES.LANDING ? 'transparent' : 'background.default' }}>
+          {state === STATES.LANDING ? (
+            renderContent()
+          ) : state === STATES.CHATTING ? (
+            renderContent()
+          ) : (
+            <Container maxWidth="md" sx={{ py: 4 }}>
+              {renderContent()}
+
+              {state !== STATES.DISCONNECTED && (
+                <Box sx={{ textAlign: 'center', mt: 4 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<Refresh />}
+                    onClick={handleDisconnect}
+                  >
+                    Back to Home
+                  </Button>
+                </Box>
+              )}
+            </Container>
+          )}
+
+          <Snackbar
+            open={notification.open}
+            autoHideDuration={4000}
             onClose={() => setNotification({ ...notification, open: false })}
           >
-            {notification.message}
-          </Alert>
-        </Snackbar>
-        
-        <SessionTimeoutModal
-          open={sessionTimeoutOpen}
-          onClose={handleSessionTimeoutClose}
-          onFindNew={handleFindNewStranger}
-          darkMode={darkMode}
-        />
-      </Box>
-    </ThemeProvider>
+            <Alert
+              severity={notification.severity}
+              onClose={() => setNotification({ ...notification, open: false })}
+            >
+              {notification.message}
+            </Alert>
+          </Snackbar>
+
+          <SessionTimeoutModal
+            open={sessionTimeoutOpen}
+            onClose={handleSessionTimeoutClose}
+            onFindNew={handleFindNewStranger}
+            darkMode={darkMode}
+          />
+        </Box>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

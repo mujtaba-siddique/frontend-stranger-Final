@@ -12,19 +12,18 @@ import { ExitToApp, LightMode, DarkMode, Videocam, Phone } from '@mui/icons-mate
 import MessageInput from './MessageInput';
 import MessageStatus from './MessageStatus';
 import TypingIndicator from './TypingIndicator';
-import VideoCallComponent from './VideoCallComponent';
-import useCallManager from '../hooks/useCallManager';
+
 import { VoiceRecorder, VoicePlayer, WebRTCVoice } from '../utils/voiceClasses';
 
-import { validateMessage, sanitizeMessage, detectSpam } from '../utils/messageValidator';
+import { sanitizeMessage } from '../utils/messageValidator';
 // Simple ID generator to avoid uuid issues
 const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 
-const ChatInterface = ({ 
-  messages, 
-  onSendMessage, 
-  onEndChat, 
-  partnerId, 
+const ChatInterface = ({
+  messages,
+  onSendMessage,
+  onEndChat,
+  partnerId,
   userId,
   isPartnerTyping,
   onTypingStart,
@@ -33,7 +32,8 @@ const ChatInterface = ({
   isConnected = true,
   darkMode,
   onToggleDarkMode,
-  socket
+  socket,
+  callManager
 }) => {
   const messagesEndRef = useRef(null);
   const [showTyping, setShowTyping] = useState(false);
@@ -42,45 +42,44 @@ const ChatInterface = ({
   const seenMessagesRef = useRef(new Set());
   const [localMessages, setLocalMessages] = useState([]);
   const voiceBlobsRef = useRef(new Map());
-  
+
   // Voice messaging refs
   const recorderRef = useRef(null);
   const playerRef = useRef(null);
   const webrtcRef = useRef(null);
-  
-  // Initialize call manager
-  const callManager = useCallManager(userId, partnerId);
-  
+
+
+
   // Initialize voice messaging
   useEffect(() => {
     if (socket && userId) {
       console.log('🎤 Initializing voice messaging...', { userId, partnerId });
-      
+
       try {
         recorderRef.current = new VoiceRecorder();
         playerRef.current = new VoicePlayer();
         webrtcRef.current = new WebRTCVoice(socket, userId);
-        
+
         webrtcRef.current.onVoiceReceived = (data) => {
           console.log('📥 Voice data received:', data.byteLength, 'bytes');
           if (playerRef.current) {
             playerRef.current.addChunk(data);
           }
         };
-        
+
         webrtcRef.current.onChannelOpen = () => {
           console.log('📡 DataChannel opened, starting receiver...');
           if (playerRef.current) {
             playerRef.current.startReceiving();
           }
         };
-        
+
         playerRef.current.onVoiceMessageReceived = (blob, messageId) => {
           console.log('🎵 Voice message received with ID:', messageId);
-          
+
           // Generate fallback ID if messageId is null
           const finalMessageId = messageId || `voice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          
+
           const voiceMessage = {
             id: finalMessageId,
             type: 'voice',
@@ -91,58 +90,58 @@ const ChatInterface = ({
           };
           voiceBlobsRef.current.set(voiceMessage.id, blob);
           setLocalMessages(prev => [...prev, voiceMessage]);
-          
+
           // Notify sender that voice message was delivered
           if (socket && partnerId) {
             socket.emit('voice-message-delivered', { messageId: finalMessageId, to: partnerId });
           }
         };
-        
+
         // Remove old listeners first
         socket.off('voice-message-delivered');
         socket.off('voice-message-played');
-        
+
         // Listen for delivery confirmation
         socket.on('voice-message-delivered', (data) => {
           console.log('✓✓ [SENDER] Voice message delivered:', data.messageId);
-          setLocalMessages(prev => prev.map(msg => 
+          setLocalMessages(prev => prev.map(msg =>
             msg.id === data.messageId ? { ...msg, status: 'seen' } : msg
           ));
         });
-        
+
         // Listen for playback (seen) event
         socket.on('voice-message-played', (data) => {
           console.log('🗑️ [SENDER] Partner played voice message:', data.messageId);
-          
+
           setLocalMessages(prev => {
             console.log('🗑️ [SENDER] Filtering messages, current count:', prev.length);
             const filtered = prev.filter(msg => msg.id !== data.messageId);
             console.log('🗑️ [SENDER] After filter count:', filtered.length);
             return filtered;
           });
-          
+
           // Just delete blob from map, no URL revocation needed
           if (voiceBlobsRef.current.has(data.messageId)) {
             console.log('🗑️ [SENDER] Cleaning up blob for:', data.messageId);
             voiceBlobsRef.current.delete(data.messageId);
           }
         });
-        
+
         console.log('🎉 Voice messaging initialized successfully!');
       } catch (error) {
         console.error('❌ Voice component creation failed:', error);
       }
     }
-    
+
     return () => {
       console.log('🧹 Cleaning up voice components...');
-      
+
       // Remove socket listeners
       if (socket) {
         socket.off('voice-message-delivered');
         socket.off('voice-message-played');
       }
-      
+
       if (recorderRef.current) {
         recorderRef.current.cleanup();
       }
@@ -154,12 +153,9 @@ const ChatInterface = ({
       }
     };
   }, [socket, userId, partnerId]);
-  
-  useEffect(() => {
-    // Initialize call listeners when component mounts
-    callManager.initializeCallListeners();
-  }, [callManager]);
-  
+
+
+
   useEffect(() => {
     // Start countdown timer
     const timer = setInterval(() => {
@@ -172,7 +168,7 @@ const ChatInterface = ({
         return prev - 1;
       });
     }, 1000);
-    
+
     return () => {
       clearInterval(timer);
     };
@@ -212,14 +208,14 @@ const ChatInterface = ({
     const messageId = generateId();
     onSendMessage(sanitizedMessage, messageId);
   };
-  
+
   const handleVoiceRecord = async (action) => {
     console.log('🎤 Voice Record:', action, {
       hasRecorder: !!recorderRef.current,
       hasWebRTC: !!webrtcRef.current,
       partnerId: partnerId
     });
-    
+
     if (!recorderRef.current || !webrtcRef.current || !partnerId) {
       console.error('❌ Voice not ready:', {
         recorder: !!recorderRef.current,
@@ -228,7 +224,7 @@ const ChatInterface = ({
       });
       return;
     }
-    
+
     if (action === 'start') {
       try {
         console.log('🎙️ Starting recording...');
@@ -246,7 +242,7 @@ const ChatInterface = ({
         console.log('⏹️ Stopping recording...');
         const blob = await recorderRef.current.stopRecording();
         console.log('📦 Blob received:', blob?.size, 'bytes');
-        
+
         if (blob && blob.size > 0) {
           const voiceMessage = {
             id: Date.now().toString(),
@@ -258,7 +254,7 @@ const ChatInterface = ({
           };
           voiceBlobsRef.current.set(voiceMessage.id, blob);
           setLocalMessages(prev => [...prev, voiceMessage]);
-          
+
           console.log('📤 Sending voice to:', partnerId, 'with messageId:', voiceMessage.id);
           await webrtcRef.current.sendVoiceBlob(blob, partnerId, voiceMessage.id);
           console.log('✅ Voice sent successfully');
@@ -270,32 +266,32 @@ const ChatInterface = ({
       }
     }
   };
-  
+
   const handleVoicePlay = (messageId, senderId) => {
     const blob = voiceBlobsRef.current.get(messageId);
     if (!blob) {
       console.error('❌ No blob found for messageId:', messageId);
       return;
     }
-    
+
     if (!playerRef.current) {
       console.error('❌ Player not initialized');
       return;
     }
-    
+
     console.log('🔊 [PLAY] Playing voice:', messageId, 'from:', senderId, 'myId:', userId);
-    
+
     const onPlaybackEnd = () => {
       console.log('🗑️ [END] Playback ended for:', messageId);
-      
+
       setLocalMessages(prev => {
         const filtered = prev.filter(msg => msg.id !== messageId);
         console.log('🗑️ [END] Deleted from UI, before:', prev.length, 'after:', filtered.length);
         return filtered;
       });
-      
+
       voiceBlobsRef.current.delete(messageId);
-      
+
       if (senderId !== userId && socket && partnerId) {
         console.log('📤 [END] Notifying sender:', messageId, 'to:', partnerId);
         socket.emit('voice-message-played', { messageId, to: partnerId });
@@ -303,16 +299,16 @@ const ChatInterface = ({
         console.log('🚫 [END] Not notifying - own message');
       }
     };
-    
+
     playerRef.current.playVoice(blob, onPlaybackEnd);
   };
 
   return (
-    <Box sx={{ 
-      height: '100vh', 
-      display: 'flex', 
+    <Box sx={{
+      height: '100vh',
+      display: 'flex',
       flexDirection: 'column',
-      background: darkMode 
+      background: darkMode
         ? 'linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%)'
         : 'linear-gradient(135deg, #ffffff 0%, #f8fafc 30%, #e2e8f0 100%)',
       position: 'relative',
@@ -323,24 +319,24 @@ const ChatInterface = ({
         left: 0,
         right: 0,
         bottom: 0,
-        background: darkMode 
+        background: darkMode
           ? 'radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%)'
           : 'radial-gradient(circle at 20% 80%, rgba(102, 126, 234, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255, 107, 107, 0.1) 0%, transparent 50%)',
         pointerEvents: 'none'
       }
     }}>
       {/* Header */}
-      <Box 
-        sx={{ 
-          p: { xs: 1, sm: 2, md: 3 }, 
-          display: 'flex', 
-          justifyContent: 'space-between', 
+      <Box
+        sx={{
+          p: { xs: 1, sm: 2, md: 3 },
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          background: darkMode 
+          background: darkMode
             ? 'rgba(15, 15, 35, 0.95)'
             : 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(20px)',
-          borderBottom: darkMode 
+          borderBottom: darkMode
             ? '1px solid rgba(255, 255, 255, 0.1)'
             : '1px solid rgba(0, 0, 0, 0.1)',
           color: darkMode ? 'white' : '#1e293b',
@@ -351,22 +347,22 @@ const ChatInterface = ({
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5, md: 2 } }}>
-          <Badge 
+          <Badge
             overlap="circular"
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             badgeContent={
-              <Box sx={{ 
-                width: 14, 
-                height: 14, 
-                borderRadius: '50%', 
+              <Box sx={{
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
                 background: 'linear-gradient(45deg, #00ff88, #00cc6a)',
                 border: '2px solid #0f0f23',
                 boxShadow: '0 0 10px rgba(0, 255, 136, 0.5)'
               }} />
             }
           >
-            <Avatar sx={{ 
-              width: { xs: 32, sm: 40, md: 45 }, 
+            <Avatar sx={{
+              width: { xs: 32, sm: 40, md: 45 },
               height: { xs: 32, sm: 40, md: 45 },
               background: 'linear-gradient(135deg, #ff6b6b, #ee5a24)',
               boxShadow: '0 0 20px rgba(255, 107, 107, 0.4)'
@@ -375,7 +371,7 @@ const ChatInterface = ({
             </Avatar>
           </Badge>
           <Box>
-            <Typography variant="h6" sx={{ 
+            <Typography variant="h6" sx={{
               fontWeight: 'bold',
               background: 'linear-gradient(45deg, #ff6b6b, #feca57)',
               backgroundClip: 'text',
@@ -387,16 +383,16 @@ const ChatInterface = ({
               Anonymous Stranger
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{ 
-                width: 8, 
-                height: 8, 
-                borderRadius: '50%', 
+              <Box sx={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
                 background: '#00ff88',
                 boxShadow: '0 0 8px rgba(0, 255, 136, 0.6)',
                 animation: 'pulse 2s infinite'
               }} />
-              <Typography variant="caption" sx={{ 
-                color: '#00ff88', 
+              <Typography variant="caption" sx={{
+                color: '#00ff88',
                 fontWeight: 500,
                 fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' },
                 display: { xs: 'none', sm: 'block' }
@@ -406,22 +402,22 @@ const ChatInterface = ({
             </Box>
           </Box>
         </Box>
-        
+
         <Box sx={{ display: 'flex', gap: { xs: 0.3, sm: 0.5, md: 0.8 } }}>
           {/* Video Call Button */}
           <IconButton
             onClick={() => callManager.startCall('video')}
             disabled={!partnerId || callManager.isCallActive}
-            size={window.innerWidth < 600 ? 'small' : 'medium'}
+            size="small"
             sx={{
               color: darkMode ? 'white' : '#1e293b',
-              background: darkMode 
+              background: darkMode
                 ? 'rgba(255, 255, 255, 0.1)'
                 : 'rgba(0, 0, 0, 0.1)',
               width: { xs: 36, sm: 40, md: 48 },
               height: { xs: 36, sm: 40, md: 48 },
-              '&:hover': { 
-                background: darkMode 
+              '&:hover': {
+                background: darkMode
                   ? 'rgba(255, 255, 255, 0.2)'
                   : 'rgba(0, 0, 0, 0.2)',
                 transform: { xs: 'none', sm: 'scale(1.05)' }
@@ -434,21 +430,21 @@ const ChatInterface = ({
           >
             <Videocam />
           </IconButton>
-          
+
           {/* Audio Call Button */}
           <IconButton
             onClick={() => callManager.startCall('audio')}
             disabled={!partnerId || callManager.isCallActive}
-            size={window.innerWidth < 600 ? 'small' : 'medium'}
+            size="small"
             sx={{
               color: darkMode ? 'white' : '#1e293b',
-              background: darkMode 
+              background: darkMode
                 ? 'rgba(255, 255, 255, 0.1)'
                 : 'rgba(0, 0, 0, 0.1)',
               width: { xs: 36, sm: 40, md: 48 },
               height: { xs: 36, sm: 40, md: 48 },
-              '&:hover': { 
-                background: darkMode 
+              '&:hover': {
+                background: darkMode
                   ? 'rgba(255, 255, 255, 0.2)'
                   : 'rgba(0, 0, 0, 0.2)',
                 transform: { xs: 'none', sm: 'scale(1.05)' }
@@ -461,19 +457,19 @@ const ChatInterface = ({
           >
             <Phone />
           </IconButton>
-          
-          <IconButton 
+
+          <IconButton
             onClick={onToggleDarkMode}
-            size={window.innerWidth < 600 ? 'small' : 'medium'}
-            sx={{ 
+            size="small"
+            sx={{
               color: darkMode ? 'white' : '#1e293b',
-              background: darkMode 
+              background: darkMode
                 ? 'rgba(255, 255, 255, 0.1)'
                 : 'rgba(0, 0, 0, 0.1)',
               width: { xs: 36, sm: 40, md: 48 },
               height: { xs: 36, sm: 40, md: 48 },
-              '&:hover': { 
-                background: darkMode 
+              '&:hover': {
+                background: darkMode
                   ? 'rgba(255, 255, 255, 0.2)'
                   : 'rgba(0, 0, 0, 0.2)',
                 transform: { xs: 'none', sm: 'scale(1.05)' }
@@ -488,12 +484,12 @@ const ChatInterface = ({
             startIcon={<ExitToApp sx={{ display: { xs: 'none', sm: 'block' } }} />}
             onClick={onEndChat}
             disabled={!endChatEnabled}
-            size={window.innerWidth < 600 ? 'small' : 'medium'}
+            size="small"
             sx={{
-              background: endChatEnabled 
+              background: endChatEnabled
                 ? 'linear-gradient(45deg, #ff4757, #ff3742)'
                 : 'linear-gradient(45deg, #666, #555)',
-              '&:hover': endChatEnabled ? { 
+              '&:hover': endChatEnabled ? {
                 background: 'linear-gradient(45deg, #ff3742, #ff2f3a)',
                 transform: { xs: 'none', sm: 'translateY(-2px)' },
                 boxShadow: '0 8px 25px rgba(255, 71, 87, 0.4)'
@@ -519,12 +515,12 @@ const ChatInterface = ({
 
       {/* Call Settings */}
       {/* Removed call settings */}
-      
+
       {/* Messages Area */}
-      <Box 
-        sx={{ 
-          flex: 1, 
-          overflow: 'auto', 
+      <Box
+        sx={{
+          flex: 1,
+          overflow: 'auto',
           p: { xs: 0.5, sm: 1, md: 2 },
           background: 'transparent',
           position: 'relative',
@@ -541,16 +537,16 @@ const ChatInterface = ({
           }
         }}
       >
-        <Alert 
-          sx={{ 
+        <Alert
+          sx={{
             mb: { xs: 1, sm: 1.5, md: 2 },
             mx: { xs: 0.5, sm: 1, md: 0 },
             borderRadius: { xs: 2, sm: 3, md: 4 },
-            background: darkMode 
+            background: darkMode
               ? 'rgba(15, 15, 35, 0.8)'
               : 'rgba(255, 255, 255, 0.9)',
             backdropFilter: 'blur(20px)',
-            border: darkMode 
+            border: darkMode
               ? '1px solid rgba(255, 255, 255, 0.1)'
               : '1px solid rgba(0, 0, 0, 0.1)',
             color: darkMode ? 'white' : '#1e293b',
@@ -563,7 +559,7 @@ const ChatInterface = ({
             }
           }}
         >
-          <Typography sx={{ 
+          <Typography sx={{
             background: 'linear-gradient(45deg, #feca57, #ff9ff3)',
             backgroundClip: 'text',
             WebkitBackgroundClip: 'text',
@@ -573,11 +569,11 @@ const ChatInterface = ({
             🎭 Anonymous chat active • Be respectful and enjoy!
           </Typography>
         </Alert>
-        
+
         {[...messages, ...localMessages].sort((a, b) => a.timestamp - b.timestamp).map((msg, index) => {
           const isOwn = msg.senderId === userId;
           const isVoice = msg.type === 'voice';
-          
+
           return (
             <Box
               key={msg.id || index}
@@ -591,10 +587,10 @@ const ChatInterface = ({
               }}
             >
               {!isOwn && (
-                <Avatar 
-                  sx={{ 
-                    width: { xs: 28, sm: 32, md: 40 }, 
-                    height: { xs: 28, sm: 32, md: 40 }, 
+                <Avatar
+                  sx={{
+                    width: { xs: 28, sm: 32, md: 40 },
+                    height: { xs: 28, sm: 32, md: 40 },
                     mr: { xs: 1, sm: 1.5, md: 2 },
                     background: 'linear-gradient(135deg, #ff6b6b, #ee5a24)',
                     boxShadow: '0 0 15px rgba(255, 107, 107, 0.4)',
@@ -607,25 +603,25 @@ const ChatInterface = ({
               <Box
                 sx={{
                   maxWidth: { xs: '90%', sm: '85%', md: '75%' },
-                  background: isOwn 
+                  background: isOwn
                     ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                    : darkMode 
+                    : darkMode
                       ? 'rgba(255, 255, 255, 0.1)'
                       : 'rgba(0, 0, 0, 0.05)',
                   backdropFilter: 'blur(20px)',
-                  border: isOwn 
+                  border: isOwn
                     ? '1px solid rgba(102, 126, 234, 0.3)'
-                    : darkMode 
+                    : darkMode
                       ? '1px solid rgba(255, 255, 255, 0.2)'
                       : '1px solid rgba(0, 0, 0, 0.1)',
-                  borderRadius: { 
+                  borderRadius: {
                     xs: isOwn ? '12px 12px 4px 12px' : '12px 12px 12px 4px',
                     sm: isOwn ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                     md: isOwn ? '20px 20px 6px 20px' : '20px 20px 20px 6px'
                   },
                   p: { xs: 1.5, sm: 2, md: 2.5 },
                   color: isOwn ? 'white' : darkMode ? 'white' : '#1e293b',
-                  boxShadow: isOwn 
+                  boxShadow: isOwn
                     ? '0 8px 32px rgba(102, 126, 234, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
                     : '0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
                   position: 'relative',
@@ -636,7 +632,7 @@ const ChatInterface = ({
                 }}
               >
                 {isVoice ? (
-                  <Box 
+                  <Box
                     sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
                     onClick={() => handleVoicePlay(msg.id, msg.senderId)}
                   >
@@ -656,9 +652,9 @@ const ChatInterface = ({
                       <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
                         Voice Message
                       </Typography>
-                      <Box sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
+                      <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
                         gap: 0.5,
                         opacity: 0.8
                       }}>
@@ -687,7 +683,7 @@ const ChatInterface = ({
                     </Box>
                   </Box>
                 ) : (
-                  <Typography variant="body1" sx={{ 
+                  <Typography variant="body1" sx={{
                     lineHeight: 1.4,
                     fontSize: { xs: '13px', sm: '14px', md: '15px' },
                     fontWeight: 400,
@@ -696,33 +692,33 @@ const ChatInterface = ({
                     {msg.message}
                   </Typography>
                 )}
-                <Box sx={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <Box sx={{
+                  display: 'flex',
+                  alignItems: 'center',
                   justifyContent: 'space-between',
                   mt: { xs: 0.8, sm: 1, md: 1.2 }
                 }}>
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      opacity: 0.7, 
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      opacity: 0.7,
                       fontSize: { xs: '9px', sm: '10px', md: '11px' },
-                      color: isOwn ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.6)'
+                      color: isOwn ? 'rgba(255,255,255,0.8)' : darkMode ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.5)'
                     }}
                   >
-                    {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Typography>
-                  <MessageStatus 
-                    status={msg.status} 
+                  <MessageStatus
+                    status={msg.status}
                     isOwn={isOwn}
                   />
                 </Box>
               </Box>
               {isOwn && (
-                <Avatar 
-                  sx={{ 
-                    width: { xs: 28, sm: 32, md: 40 }, 
-                    height: { xs: 28, sm: 32, md: 40 }, 
+                <Avatar
+                  sx={{
+                    width: { xs: 28, sm: 32, md: 40 },
+                    height: { xs: 28, sm: 32, md: 40 },
                     ml: { xs: 1, sm: 1.5, md: 2 },
                     background: 'linear-gradient(135deg, #00ff88, #00cc6a)',
                     boxShadow: '0 0 15px rgba(0, 255, 136, 0.4)',
@@ -735,25 +731,25 @@ const ChatInterface = ({
             </Box>
           );
         })}
-        
+
         <TypingIndicator show={showTyping} />
-        
+
         <div ref={messagesEndRef} />
       </Box>
 
       {/* Message Input */}
-      <Box sx={{ 
-        background: darkMode 
+      <Box sx={{
+        background: darkMode
           ? 'rgba(15, 15, 35, 0.95)'
           : 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(20px)',
-        borderTop: darkMode 
+        borderTop: darkMode
           ? '1px solid rgba(255, 255, 255, 0.1)'
           : '1px solid rgba(0, 0, 0, 0.1)',
         position: 'relative',
         zIndex: 10
       }}>
-        <MessageInput 
+        <MessageInput
           onSendMessage={handleSendMessage}
           onTypingStart={onTypingStart}
           onTypingStop={onTypingStop}
@@ -762,31 +758,9 @@ const ChatInterface = ({
           darkMode={darkMode}
         />
       </Box>
-      
-      {/* Call Modals - Video Call Component */}
-      <VideoCallComponent
-        isCallActive={callManager.isCallActive}
-        callType={callManager.callType}
-        isIncoming={callManager.isIncoming}
-        callerName={callManager.callerName}
-        onAcceptCall={callManager.acceptCall}
-        onRejectCall={callManager.rejectCall}
-        onEndCall={callManager.endCall}
-        onToggleVideo={callManager.toggleVideo}
-        onToggleAudio={callManager.toggleAudio}
-        onToggleSpeaker={callManager.toggleSpeaker}
-        onSwitchCamera={callManager.switchCamera}
-        isVideoEnabled={callManager.isVideoEnabled}
-        isAudioEnabled={callManager.isAudioEnabled}
-        isSpeakerOn={callManager.isSpeakerOn}
-        isFrontCamera={callManager.isFrontCamera}
-        localVideoRef={callManager.localVideoRef}
-        remoteVideoRef={callManager.remoteVideoRef}
-        localAudioRef={callManager.localAudioRef}
-        remoteAudioRef={callManager.remoteAudioRef}
-        darkMode={darkMode}
-      />
-      
+
+
+
       <style>{`
         @keyframes slideIn {
           from {

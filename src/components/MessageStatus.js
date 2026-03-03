@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Typography } from '@mui/material';
 
 const MessageStatus = ({ status, isOwn }) => {
   if (!isOwn) return null;
@@ -27,9 +27,9 @@ const MessageStatus = ({ status, isOwn }) => {
   const statusDisplay = getStatusDisplay();
 
   return (
-    <Typography 
-      variant="caption" 
-      sx={{ 
+    <Typography
+      variant="caption"
+      sx={{
         fontSize: '11px',
         color: statusDisplay.color,
         fontWeight: 600,
