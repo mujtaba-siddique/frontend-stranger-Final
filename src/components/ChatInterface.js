@@ -407,7 +407,7 @@ const ChatInterface = ({
               whiteSpace: 'nowrap',
               letterSpacing: '0.3px'
             }}>
-              Anonymous Stranger
+              WhisperHello
             </Typography>
             <Typography variant="caption" sx={{
               color: 'rgba(255,255,255,0.85)',
@@ -664,7 +664,7 @@ const ChatInterface = ({
                     px: { xs: 1.8, sm: 2.2 },
                     py: { xs: 1, sm: 1.2 },
                     color: isOwn 
-                      ? 'white'
+                      ? darkMode ? 'white' : '#111b21'
                       : darkMode ? '#e4e6eb' : '#111b21',
                     boxShadow: darkMode
                       ? '0 2px 8px rgba(0,0,0,0.4)'
@@ -821,17 +821,12 @@ const ChatInterface = ({
 
       {/* ========== MESSAGE INPUT ========== */}
       <Box sx={{
-        background: darkMode
-          ? 'linear-gradient(180deg, #1e2033 0%, #1a1d2e 100%)'
-          : 'linear-gradient(180deg, #f0f2f5 0%, #e8eaed 100%)',
+        background: 'transparent',
         position: 'relative',
         zIndex: 10,
-        borderTop: darkMode
-          ? '1px solid rgba(255,255,255,0.06)'
-          : '1px solid rgba(0,0,0,0.08)',
-        boxShadow: darkMode
-          ? '0 -2px 10px rgba(0,0,0,0.3)'
-          : '0 -2px 10px rgba(0,0,0,0.05)'
+        px: { xs: 1, sm: 2, md: 3 },
+        pb: { xs: 1, sm: 1.5 },
+        pt: 1
       }}>
         <MessageInput
           onSendMessage={handleSendMessage}
