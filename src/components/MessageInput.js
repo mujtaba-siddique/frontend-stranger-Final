@@ -4,14 +4,17 @@ import {
   TextField,
   IconButton,
   Typography,
-  Fade
+  Fade,
+  Popover
 } from '@mui/material';
 import { Send, WifiOff, Mic, EmojiEmotions } from '@mui/icons-material';
+import EmojiPicker from 'emoji-picker-react';
 
 const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, isConnected = true, darkMode = true, onVoiceRecord }) => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [emojiAnchor, setEmojiAnchor] = useState(null);
   const typingTimeoutRef = useRef(null);
 
   const handleSubmit = (e) => {
@@ -122,6 +125,11 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
 
   const hasText = message.trim().length > 0;
 
+  const handleEmojiClick = (emojiData) => {
+    setMessage(prev => prev + emojiData.emoji);
+    handleStartTyping();
+  };
+
   return (
     <Box>
       {/* Connection Status */}
@@ -181,6 +189,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
           {/* Emoji button */}
           <IconButton
             size="small"
+            onClick={(e) => setEmojiAnchor(e.currentTarget)}
             sx={{
               alignSelf: 'flex-end',
               color: darkMode ? 'rgba(255,255,255,0.5)' : '#54656f',
@@ -198,6 +207,27 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
           >
             <EmojiEmotions sx={{ fontSize: 23 }} />
           </IconButton>
+
+          <Popover
+            open={Boolean(emojiAnchor)}
+            anchorEl={emojiAnchor}
+            onClose={() => setEmojiAnchor(null)}
+            anchorOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+          >
+            <EmojiPicker
+              onEmojiClick={handleEmojiClick}
+              theme={darkMode ? 'dark' : 'light'}
+              width={320}
+              height={400}
+            />
+          </Popover>
 
           <TextField
             fullWidth
