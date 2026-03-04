@@ -191,8 +191,8 @@ function App() {
     });
 
     socketService.onNewMessage((message) => {
-      console.log('📩 Received message:', message.id);
-      // Decrypt message
+      console.log('📩 Received encrypted message:', message.id);
+      // Decrypt message from backend
       const decryptedMessage = EncryptionService.decrypt(message.message);
       const decryptedMsg = { ...message, message: decryptedMessage };
       setMessages(prev => {

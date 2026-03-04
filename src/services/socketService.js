@@ -96,8 +96,8 @@ class SocketService {
   sendMessage(message, messageId) {
     if (this.socket && this.isConnected && message.trim()) {
       console.log('📤 SENDING MESSAGE:', { message, messageId });
-      const encryptedMessage = EncryptionService.encrypt(message);
-      this.socket.emit('send-message', { message: encryptedMessage, messageId });
+      // Don't encrypt here - send plain text, backend will handle encryption
+      this.socket.emit('send-message', { message, messageId });
     } else {
       console.error('❌ Cannot send message - socket not connected or empty message');
     }
@@ -257,8 +257,8 @@ class SocketService {
   sendCallOffer(data) {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call offer:', data);
-      const encryptedOffer = EncryptionService.encrypt(data.offer);
-      this.socket.emit('call-offer', { ...data, offer: encryptedOffer });
+      // Don't encrypt here - backend will handle it
+      this.socket.emit('call-offer', data);
     } else {
       console.error('❌ Cannot send call offer - not connected');
     }
@@ -267,8 +267,8 @@ class SocketService {
   sendCallAnswer(data) {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call answer:', data);
-      const encryptedAnswer = EncryptionService.encrypt(data.answer);
-      this.socket.emit('call-answer', { ...data, answer: encryptedAnswer });
+      // Don't encrypt here - backend will handle it
+      this.socket.emit('call-answer', data);
     } else {
       console.error('❌ Cannot send call answer - not connected');
     }
@@ -276,8 +276,8 @@ class SocketService {
 
   sendIceCandidate(data) {
     if (this.socket && this.isConnected) {
-      const encryptedCandidate = EncryptionService.encrypt(data.candidate);
-      this.socket.emit('ice-candidate', { ...data, candidate: encryptedCandidate });
+      // Don't encrypt here - backend will handle it
+      this.socket.emit('ice-candidate', data);
     }
   }
 

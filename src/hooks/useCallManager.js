@@ -471,8 +471,8 @@ const useCallManager = (userId, partnerId) => {
     console.log('🔧 Initializing call listeners');
 
     socketService.onCallOffer(async (data) => {
-      console.log('📞 Incoming call offer from:', data.from);
-      // Decrypt offer
+      console.log('📞 Incoming encrypted call offer from:', data.from);
+      // Decrypt offer from backend
       const decryptedOffer = EncryptionService.decrypt(data.offer);
       if (callActiveRef.current || isIncomingRef.current) {
         console.log('⚠️ Already in a call or incoming, auto-rejecting');
@@ -487,13 +487,13 @@ const useCallManager = (userId, partnerId) => {
     });
 
     socketService.onCallAnswer(async (data) => {
-      console.log('📞 Call answer received');
+      console.log('📞 Call answer received (encrypted)');
       if (!peerConnectionRef.current) return;
       const state = peerConnectionRef.current.signalingState;
       if (state === 'stable') return;
       if (state === 'have-local-offer') {
         try {
-          // Decrypt answer
+          // Decrypt answer from backend
           const decryptedAnswer = EncryptionService.decrypt(data.answer);
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(decryptedAnswer));
           remoteDescriptionSetRef.current = true;
@@ -514,7 +514,7 @@ const useCallManager = (userId, partnerId) => {
     socketService.onIceCandidate(async (data) => {
       if (!data.candidate) return;
 
-      // Decrypt ICE candidate
+      // Decrypt ICE candidate from backend
       const decryptedCandidate = EncryptionService.decrypt(data.candidate);
 
       if (!peerConnectionRef.current || !remoteDescriptionSetRef.current) {
