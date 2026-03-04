@@ -191,6 +191,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
             size="small"
             onClick={(e) => setEmojiAnchor(e.currentTarget)}
             sx={{
+              display: { xs: 'none', sm: 'none', md: 'flex' },
               alignSelf: 'flex-end',
               color: darkMode ? 'rgba(255,255,255,0.5)' : '#54656f',
               width: 40,
