@@ -257,6 +257,7 @@ const MessageInput = ({ onSendMessage, onTypingStart, onTypingStop, disabled, is
               '& .MuiInputBase-input': {
                 fontSize: { xs: '0.92rem', sm: '0.95rem' },
                 py: { xs: '10px', sm: '11px' },
+                pl: { xs: 2, sm: 0.5 },
                 pr: 1,
                 color: darkMode ? '#e4e6eb' : '#111b21',
                 lineHeight: 1.4,

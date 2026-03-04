@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import {
   ThemeProvider,
   CssBaseline,
-  Container,
-  Typography,
   Box,
-  Paper,
-  Button,
   Alert,
   Snackbar,
   createTheme
 } from '@mui/material';
-import { Chat, Refresh } from '@mui/icons-material';
 import socketService from './services/socketService';
 import notificationService from './services/notificationService';
 import WaitingRoom from './components/WaitingRoom';
@@ -33,6 +29,7 @@ const STATES = {
 };
 
 function App() {
+  const navigate = useNavigate();
   const [state, setState] = useState(STATES.LANDING);
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('darkMode');
@@ -88,6 +85,7 @@ function App() {
 
   const handleStartChat = () => {
     setState(STATES.PROFILE_SETUP);
+    navigate('/profile');
   };
 
   const handleProfileSubmit = async (profileData) => {
@@ -125,6 +123,7 @@ function App() {
         localStorage.setItem('userProfile', JSON.stringify(userData));
         showNotification('Profile created! Finding strangers...', 'success');
         setState(STATES.CONNECTING);
+        navigate('/chat');
         handleConnectWithProfile(userData);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -141,10 +140,6 @@ function App() {
         showNotification('Failed to create profile. Please try again.', 'error');
       }
     }
-  };
-
-  const handleConnect = () => {
-    handleConnectWithProfile(userProfile);
   };
 
   const handleConnectWithProfile = (profileData, skipClearMessages = false) => {
@@ -344,21 +339,6 @@ function App() {
     socketService.endChat();
   };
 
-  const handleDisconnect = () => {
-    socketService.disconnect();
-    setState(STATES.LANDING);
-    setMessages([]);
-    setUserId(null);
-    setPartnerId(null);
-    setSessionId(null);
-    // Clear all session data
-    localStorage.removeItem('chatSession');
-    localStorage.removeItem('chatMessages');
-    localStorage.removeItem('userProfile');
-  };
-
-
-
   const handleSessionTimeoutClose = () => {
     setSessionTimeoutOpen(false);
   };
@@ -420,186 +400,120 @@ function App() {
     };
   }, []);
 
-  const renderContent = () => {
-    switch (state) {
-      case STATES.LANDING:
-        return (
-          <LandingPage
-            onStartChat={handleStartChat}
-            darkMode={darkMode}
-            onToggleDarkMode={toggleDarkMode}
-          />
-        );
-
-      case STATES.PROFILE_SETUP:
-        return (
-          <>
+  return (
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Routes>
+          <Route path="/" element={
             <LandingPage
               onStartChat={handleStartChat}
               darkMode={darkMode}
               onToggleDarkMode={toggleDarkMode}
             />
-            <UserProfileModal
-              open={true}
-              onClose={() => setState(STATES.LANDING)}
-              onSubmit={handleProfileSubmit}
-              darkMode={darkMode}
-            />
-          </>
-        );
+          } />
+          
+          <Route path="/profile" element={
+            <>
+              <LandingPage
+                onStartChat={handleStartChat}
+                darkMode={darkMode}
+                onToggleDarkMode={toggleDarkMode}
+              />
+              <UserProfileModal
+                open={true}
+                onClose={() => navigate('/')}
+                onSubmit={handleProfileSubmit}
+                darkMode={darkMode}
+              />
+            </>
+          } />
+          
+          <Route path="/chat" element={
+            <Box sx={{ minHeight: '100vh', backgroundColor: 'background.default' }}>
+              {(state === STATES.CONNECTING || state === STATES.WAITING) ? (
+                <WaitingRoom
+                  onCancel={() => {
+                    socketService.disconnect();
+                    setState(STATES.LANDING);
+                    setMessages([]);
+                    setPartnerId(null);
+                    localStorage.removeItem('chatSession');
+                    navigate('/');
+                  }}
+                  darkMode={darkMode}
+                  onToggleDarkMode={toggleDarkMode}
+                  message={isReconnecting ? 'Reconnecting to your chat...' : undefined}
+                />
+              ) : state === STATES.CHATTING ? (
+                <>
+                  <ChatInterface
+                    messages={messages}
+                    onSendMessage={handleSendMessage}
+                    onEndChat={handleEndChat}
+                    onTypingStart={handleTypingStart}
+                    onTypingStop={handleTypingStop}
+                    onMessageSeen={handleMessageSeen}
+                    partnerId={partnerId}
+                    userId={userId}
+                    isPartnerTyping={isPartnerTyping}
+                    isConnected={socketService.isConnected}
+                    darkMode={darkMode}
+                    onToggleDarkMode={toggleDarkMode}
+                    socket={socketService.socket}
+                    callManager={callManager}
+                  />
 
-      case STATES.DISCONNECTED:
-        return (
-          <Paper elevation={3} sx={{ p: 4, textAlign: 'center', maxWidth: 400, mx: 'auto', mt: 4 }}>
-            <Chat sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-            <Typography variant="h4" gutterBottom>
-              Stranger Chat
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Connect with random strangers and have anonymous conversations
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={handleConnect}
-              sx={{ mt: 2 }}
-            >
-              Start Chatting
-            </Button>
-          </Paper>
-        );
+                  <VideoCallComponent
+                    isCallActive={callManager.isCallActive}
+                    callType={callManager.callType}
+                    isIncoming={callManager.isIncoming}
+                    isRinging={callManager.isRinging}
+                    callerName={callManager.callerName}
+                    onAcceptCall={callManager.acceptCall}
+                    onRejectCall={callManager.rejectCall}
+                    onEndCall={callManager.endCall}
+                    onToggleVideo={callManager.toggleVideo}
+                    onToggleAudio={callManager.toggleAudio}
+                    onToggleSpeaker={callManager.toggleSpeaker}
+                    onSwitchCamera={callManager.switchCamera}
+                    isVideoEnabled={callManager.isVideoEnabled}
+                    isAudioEnabled={callManager.isAudioEnabled}
+                    isSpeakerOn={callManager.isSpeakerOn}
+                    isFrontCamera={callManager.isFrontCamera}
+                    localVideoRef={callManager.localVideoRef}
+                    remoteVideoRef={callManager.remoteVideoRef}
+                    localAudioRef={callManager.localAudioRef}
+                    remoteAudioRef={callManager.remoteAudioRef}
+                    darkMode={darkMode}
+                    callQuality={callManager.callQuality}
+                    callDuration={callManager.callDuration}
+                  />
+                </>
+              ) : null}
+            </Box>
+          } />
+        </Routes>
 
-      case STATES.CONNECTING:
-        return (
-          <WaitingRoom
-            onCancel={() => {
-              socketService.disconnect();
-              setState(STATES.LANDING);
-              setMessages([]);
-              setPartnerId(null);
-              localStorage.removeItem('chatSession');
-            }}
-            darkMode={darkMode}
-            onToggleDarkMode={toggleDarkMode}
-            message={isReconnecting ? 'Reconnecting to your chat...' : undefined}
-          />
-        );
-
-      case STATES.WAITING:
-        return (
-          <WaitingRoom
-            onCancel={() => {
-              socketService.disconnect();
-              setState(STATES.LANDING);
-              setMessages([]);
-              setPartnerId(null);
-              localStorage.removeItem('chatSession');
-            }}
-            darkMode={darkMode}
-            onToggleDarkMode={toggleDarkMode}
-          />
-        );
-
-      case STATES.CHATTING:
-        return (
-          <>
-            <ChatInterface
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              onEndChat={handleEndChat}
-              onTypingStart={handleTypingStart}
-              onTypingStop={handleTypingStop}
-              onMessageSeen={handleMessageSeen}
-              partnerId={partnerId}
-              userId={userId}
-              isPartnerTyping={isPartnerTyping}
-              isConnected={socketService.isConnected}
-              darkMode={darkMode}
-              onToggleDarkMode={toggleDarkMode}
-              socket={socketService.socket}
-              callManager={callManager}
-            />
-
-            <VideoCallComponent
-              isCallActive={callManager.isCallActive}
-              callType={callManager.callType}
-              isIncoming={callManager.isIncoming}
-              isRinging={callManager.isRinging}
-              callerName={callManager.callerName}
-              onAcceptCall={callManager.acceptCall}
-              onRejectCall={callManager.rejectCall}
-              onEndCall={callManager.endCall}
-              onToggleVideo={callManager.toggleVideo}
-              onToggleAudio={callManager.toggleAudio}
-              onToggleSpeaker={callManager.toggleSpeaker}
-              onSwitchCamera={callManager.switchCamera}
-              isVideoEnabled={callManager.isVideoEnabled}
-              isAudioEnabled={callManager.isAudioEnabled}
-              isSpeakerOn={callManager.isSpeakerOn}
-              isFrontCamera={callManager.isFrontCamera}
-              localVideoRef={callManager.localVideoRef}
-              remoteVideoRef={callManager.remoteVideoRef}
-              localAudioRef={callManager.localAudioRef}
-              remoteAudioRef={callManager.remoteAudioRef}
-              darkMode={darkMode}
-              callQuality={callManager.callQuality}
-              callDuration={callManager.callDuration}
-            />
-          </>
-        );
-
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <ErrorBoundary>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Box sx={{ minHeight: '100vh', backgroundColor: state === STATES.LANDING ? 'transparent' : 'background.default' }}>
-          {state === STATES.LANDING ? (
-            renderContent()
-          ) : state === STATES.CHATTING ? (
-            renderContent()
-          ) : (
-            <Container maxWidth="md" sx={{ py: 4 }}>
-              {renderContent()}
-
-              {state !== STATES.DISCONNECTED && (
-                <Box sx={{ textAlign: 'center', mt: 4 }}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Refresh />}
-                    onClick={handleDisconnect}
-                  >
-                    Back to Home
-                  </Button>
-                </Box>
-              )}
-            </Container>
-          )}
-
-          <Snackbar
-            open={notification.open}
-            autoHideDuration={4000}
+        <Snackbar
+          open={notification.open}
+          autoHideDuration={4000}
+          onClose={() => setNotification({ ...notification, open: false })}
+        >
+          <Alert
+            severity={notification.severity}
             onClose={() => setNotification({ ...notification, open: false })}
           >
-            <Alert
-              severity={notification.severity}
-              onClose={() => setNotification({ ...notification, open: false })}
-            >
-              {notification.message}
-            </Alert>
-          </Snackbar>
+            {notification.message}
+          </Alert>
+        </Snackbar>
 
-          <SessionTimeoutModal
-            open={sessionTimeoutOpen}
-            onClose={handleSessionTimeoutClose}
-            onFindNew={handleFindNewStranger}
-            darkMode={darkMode}
-          />
-        </Box>
+        <SessionTimeoutModal
+          open={sessionTimeoutOpen}
+          onClose={handleSessionTimeoutClose}
+          onFindNew={handleFindNewStranger}
+          darkMode={darkMode}
+        />
       </ThemeProvider>
     </ErrorBoundary>
   );
