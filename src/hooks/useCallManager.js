@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import socketService from '../services/socketService';
+import EncryptionService from '../utils/encryption';
 
 const useCallManager = (userId, partnerId) => {
   const [isCallActive, setIsCallActive] = useState(false);
@@ -471,13 +472,14 @@ const useCallManager = (userId, partnerId) => {
 
     socketService.onCallOffer(async (data) => {
       console.log('📞 Incoming call offer from:', data.from);
-      // Reject if already in a call or already showing incoming dialog
+      // Decrypt offer
+      const decryptedOffer = EncryptionService.decrypt(data.offer);
       if (callActiveRef.current || isIncomingRef.current) {
         console.log('⚠️ Already in a call or incoming, auto-rejecting');
         socketService.sendCallEnd({ to: data.from });
         return;
       }
-      incomingCallDataRef.current = data;
+      incomingCallDataRef.current = { ...data, offer: decryptedOffer };
       isIncomingRef.current = true;
       setCallerName('Anonymous Stranger');
       setCallType(data.callType);
@@ -491,7 +493,9 @@ const useCallManager = (userId, partnerId) => {
       if (state === 'stable') return;
       if (state === 'have-local-offer') {
         try {
-          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          // Decrypt answer
+          const decryptedAnswer = EncryptionService.decrypt(data.answer);
+          await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(decryptedAnswer));
           remoteDescriptionSetRef.current = true;
           console.log('✅ Remote description (answer) set');
           setIsRinging(false);
@@ -499,7 +503,6 @@ const useCallManager = (userId, partnerId) => {
             clearTimeout(callTimeoutRef.current);
             callTimeoutRef.current = null;
           }
-          // Process any queued ICE candidates
           await processIceCandidateQueue();
         } catch (err) {
           console.error('❌ Error setting answer:', err);
@@ -511,15 +514,17 @@ const useCallManager = (userId, partnerId) => {
     socketService.onIceCandidate(async (data) => {
       if (!data.candidate) return;
 
-      // Queue candidates if peer connection doesn't exist yet OR remote description is not set
+      // Decrypt ICE candidate
+      const decryptedCandidate = EncryptionService.decrypt(data.candidate);
+
       if (!peerConnectionRef.current || !remoteDescriptionSetRef.current) {
-        iceCandidateQueueRef.current.push(data.candidate);
+        iceCandidateQueueRef.current.push(decryptedCandidate);
         console.log('📦 ICE candidate queued (waiting for peer connection / remote description)');
         return;
       }
 
       try {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(decryptedCandidate));
       } catch (err) {
         console.warn('⚠️ Error adding ICE candidate:', err.message);
       }

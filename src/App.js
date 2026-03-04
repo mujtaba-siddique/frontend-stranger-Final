@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import socketService from './services/socketService';
 import notificationService from './services/notificationService';
+import EncryptionService from './utils/encryption';
 import WaitingRoom from './components/WaitingRoom';
 import ChatInterface from './components/ChatInterface';
 import LandingPage from './components/LandingPage';
@@ -191,14 +192,17 @@ function App() {
 
     socketService.onNewMessage((message) => {
       console.log('📩 Received message:', message.id);
+      // Decrypt message
+      const decryptedMessage = EncryptionService.decrypt(message.message);
+      const decryptedMsg = { ...message, message: decryptedMessage };
       setMessages(prev => {
-        const updated = [...prev, message];
+        const updated = [...prev, decryptedMsg];
         localStorage.setItem('chatMessages', JSON.stringify(updated));
         return updated;
       });
 
       if (document.hidden) {
-        notificationService.showMessageNotification(message.message);
+        notificationService.showMessageNotification(decryptedMessage);
         notificationService.playNotificationSound();
       }
 

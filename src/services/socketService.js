@@ -1,4 +1,5 @@
 import { io } from 'socket.io-client';
+import EncryptionService from '../utils/encryption';
 
 class SocketService {
   constructor() {
@@ -95,7 +96,8 @@ class SocketService {
   sendMessage(message, messageId) {
     if (this.socket && this.isConnected && message.trim()) {
       console.log('📤 SENDING MESSAGE:', { message, messageId });
-      this.socket.emit('send-message', { message, messageId });
+      const encryptedMessage = EncryptionService.encrypt(message);
+      this.socket.emit('send-message', { message: encryptedMessage, messageId });
     } else {
       console.error('❌ Cannot send message - socket not connected or empty message');
     }
@@ -255,7 +257,8 @@ class SocketService {
   sendCallOffer(data) {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call offer:', data);
-      this.socket.emit('call-offer', data);
+      const encryptedOffer = EncryptionService.encrypt(data.offer);
+      this.socket.emit('call-offer', { ...data, offer: encryptedOffer });
     } else {
       console.error('❌ Cannot send call offer - not connected');
     }
@@ -264,7 +267,8 @@ class SocketService {
   sendCallAnswer(data) {
     if (this.socket && this.isConnected) {
       console.log('📞 Sending call answer:', data);
-      this.socket.emit('call-answer', data);
+      const encryptedAnswer = EncryptionService.encrypt(data.answer);
+      this.socket.emit('call-answer', { ...data, answer: encryptedAnswer });
     } else {
       console.error('❌ Cannot send call answer - not connected');
     }
@@ -272,7 +276,8 @@ class SocketService {
 
   sendIceCandidate(data) {
     if (this.socket && this.isConnected) {
-      this.socket.emit('ice-candidate', data);
+      const encryptedCandidate = EncryptionService.encrypt(data.candidate);
+      this.socket.emit('ice-candidate', { ...data, candidate: encryptedCandidate });
     }
   }
 
