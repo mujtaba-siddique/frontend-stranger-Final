@@ -598,8 +598,7 @@ const useCallManager = (userId, partnerId) => {
         iceServers: ICE_SERVERS,
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require',
-        iceTransportPolicy: 'relay'  // Force TURN for Jio
+        rtcpMuxPolicy: 'require'
       });
       peerConnectionRef.current = pc;
       remoteDescriptionSetRef.current = false;
@@ -707,8 +706,7 @@ const useCallManager = (userId, partnerId) => {
         iceServers: ICE_SERVERS,
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require',
-        iceTransportPolicy: 'relay'  // Force TURN for Jio
+        rtcpMuxPolicy: 'require'
       });
       peerConnectionRef.current = pc;
 
