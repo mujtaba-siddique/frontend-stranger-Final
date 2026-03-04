@@ -379,11 +379,6 @@ const VideoCallComponent = ({
               Anonymous Stranger
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.3 }}>
-              {/* Call Quality bars */}
-              <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', mr: 0.5 }}>
-                {getQualityBars()}
-              </Box>
-
               <Typography variant="caption" sx={{
                 color: isRinging ? '#feca57' : callDuration === 0 ? '#87ceeb' : 'rgba(255,255,255,0.7)',
                 fontSize: '0.8rem',
@@ -409,6 +404,32 @@ const VideoCallComponent = ({
                 </Typography>
               )}
             </Box>
+            
+            {/* Video Quality Indicator */}
+            {callType === 'video' && callDuration > 0 && (
+              <Box sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                mt: 0.5,
+                background: 'rgba(0,0,0,0.4)',
+                borderRadius: 1.5,
+                px: 1,
+                py: 0.3
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px' }}>
+                  {getQualityBars()}
+                </Box>
+                <Typography variant="caption" sx={{
+                  color: getQualityColor(),
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  textTransform: 'capitalize'
+                }}>
+                  {callQuality === 'poor' ? 'Poor' : callQuality === 'fair' ? 'Fair' : 'Good'}
+                </Typography>
+              </Box>
+            )}
           </Box>
 
           {/* Right: encrypted badge */}
