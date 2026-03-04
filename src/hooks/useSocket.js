@@ -119,11 +119,15 @@ export const useSocket = (userProfile, showNotification, updateActivity) => {
       localStorage.removeItem('activeSession');
       localStorage.removeItem('chatMessages');
       
-      if (userProfile) {
+      // Only auto-reconnect if explicitly allowed
+      if (data.autoReconnect !== false && userProfile) {
         showNotification('🔄 Finding you a new stranger...', 'info');
         setTimeout(() => {
           socketService.joinChat(userProfile.id);
         }, 1000);
+      } else {
+        // Partner disconnected - wait for user action
+        showNotification('Click "Find Stranger" to start a new chat', 'info');
       }
     });
 
@@ -177,7 +181,8 @@ export const useSocket = (userProfile, showNotification, updateActivity) => {
     });
 
     socketService.onPartnerConnectionLost((data) => {
-      showNotification('⚠️ Partner connection lost. Waiting for reconnection...', 'warning');
+      const waitSeconds = Math.floor((data.waitTime || 60000) / 1000);
+      showNotification(`⚠️ Partner connection lost. Waiting ${waitSeconds}s for reconnection...`, 'warning');
       setConnectionStatus('partner-reconnecting');
     });
 

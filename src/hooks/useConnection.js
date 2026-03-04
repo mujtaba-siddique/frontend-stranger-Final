@@ -37,10 +37,11 @@ export const useConnection = (userProfile, showNotification, setupEventListeners
       }
     }
     
-    // Clean up existing connection
-    socketService.disconnect();
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
+    // Don't disconnect if already connected - reuse connection
+    if (!socketService.isConnected) {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
     }
     
     try {

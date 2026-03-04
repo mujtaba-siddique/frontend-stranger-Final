@@ -23,12 +23,13 @@ class SocketService {
 
       this.socket = io(socketUrl, {
         transports: ['websocket', 'polling'],
-        forceNew: true,
+        forceNew: false, // Reuse existing connection if available
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10, // Increased from 5
         reconnectionDelay: 1000,
-        reconnectionDelayMax: 3000,
-        timeout: 20000
+        reconnectionDelayMax: 5000, // Increased from 3000
+        timeout: 20000,
+        autoConnect: true
       });
 
       this.socket.on('connect', () => {
@@ -49,6 +50,21 @@ class SocketService {
       this.socket.on('reconnect', (attemptNumber) => {
         this.isConnected = true;
         console.log('🔄 RECONNECTED after', attemptNumber, 'attempts');
+        
+        // Restore session if exists
+        const savedSession = localStorage.getItem('activeSession');
+        if (savedSession) {
+          try {
+            const session = JSON.parse(savedSession);
+            const sessionAge = Date.now() - session.timestamp;
+            if (sessionAge < 30 * 60 * 1000) {
+              console.log('🔄 Restoring session after reconnect:', session.userId);
+              this.joinChat(session.userId);
+            }
+          } catch (error) {
+            console.error('Session restore failed:', error);
+          }
+        }
       });
 
       return this.socket;
