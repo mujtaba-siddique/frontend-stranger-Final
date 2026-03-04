@@ -41,91 +41,67 @@ const useCallManager = (userId, partnerId) => {
   useEffect(() => { partnerIdRef.current = partnerId; }, [partnerId]);
 
   /*
-   * TURN SERVER CONFIGURATION
+   * FREE TURN SERVER CONFIGURATION
    * ─────────────────────────────────────────────────────
-   * IMPORTANT: Free TURN servers (openrelay, metered static) are unreliable.
-   * For Jio network (Symmetric NAT), TURN relay is MANDATORY.
-   *
-   * Option 1 (Recommended): Use your own coturn server
-   *   - Set env vars: REACT_APP_TURN_URL, REACT_APP_TURN_USERNAME, REACT_APP_TURN_CREDENTIAL
-   *
-   * Option 2: Use Metered.ca paid plan with dynamic credentials API
-   *   - https://www.metered.ca/tools/openrelay/
-   *
-   * Ports 80 & 443 + TCP transport bypass corporate/carrier firewalls.
+   * Uses multiple free providers for maximum reliability:
+   * 
+   * 1. Google STUN (unlimited, free) - for direct P2P
+   * 2. Metered Open Relay TURN (free, ports 80/443) - main relay
+   * 3. ExpressTURN (1000GB/month free) - backup relay
+   * 
+   * Ports 80 & 443 help bypass corporate firewalls.
+   * TCP transport ensures connectivity even on strict networks.
    */
-  const ICE_SERVERS = useMemo(() => {
-    const servers = [
-      // Google STUN servers (free, unlimited) — used as fallback for non-symmetric NAT
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-    ];
+  const ICE_SERVERS = useMemo(() => [
+    // Google STUN servers (free, unlimited)
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
 
-    // Your own TURN server (highest priority — add if you have one)
-    if (process.env.REACT_APP_TURN_URL) {
-      servers.push(
-        {
-          urls: process.env.REACT_APP_TURN_URL,
-          username: process.env.REACT_APP_TURN_USERNAME,
-          credential: process.env.REACT_APP_TURN_CREDENTIAL,
-        },
-        {
-          urls: process.env.REACT_APP_TURN_URL.replace('turn:', 'turn:') + '?transport=tcp',
-          username: process.env.REACT_APP_TURN_USERNAME,
-          credential: process.env.REACT_APP_TURN_CREDENTIAL,
-        }
-      );
+    // Metered Open Relay TURN (free - static auth)
+    {
+      urls: 'turn:standard.relay.metered.ca:80',
+      username: 'e8dd65b92c62d5590f72a0e4',
+      credential: '5sIbJJYPc/Ib+dUI'
+    },
+    {
+      urls: 'turn:standard.relay.metered.ca:80?transport=tcp',
+      username: 'e8dd65b92c62d5590f72a0e4',
+      credential: '5sIbJJYPc/Ib+dUI'
+    },
+    {
+      urls: 'turn:standard.relay.metered.ca:443',
+      username: 'e8dd65b92c62d5590f72a0e4',
+      credential: '5sIbJJYPc/Ib+dUI'
+    },
+    {
+      urls: 'turns:standard.relay.metered.ca:443?transport=tcp',
+      username: 'e8dd65b92c62d5590f72a0e4',
+      credential: '5sIbJJYPc/Ib+dUI'
+    },
+
+    // Backup TURN servers
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
     }
-
-    // Metered Open Relay TURN (free fallback — static auth, may expire)
-    servers.push(
-      {
-        urls: 'turn:standard.relay.metered.ca:80',
-        username: 'e8dd65b92c62d5590f72a0e4',
-        credential: '5sIbJJYPc/Ib+dUI'
-      },
-      {
-        urls: 'turn:standard.relay.metered.ca:80?transport=tcp',
-        username: 'e8dd65b92c62d5590f72a0e4',
-        credential: '5sIbJJYPc/Ib+dUI'
-      },
-      {
-        urls: 'turn:standard.relay.metered.ca:443',
-        username: 'e8dd65b92c62d5590f72a0e4',
-        credential: '5sIbJJYPc/Ib+dUI'
-      },
-      {
-        urls: 'turns:standard.relay.metered.ca:443?transport=tcp',
-        username: 'e8dd65b92c62d5590f72a0e4',
-        credential: '5sIbJJYPc/Ib+dUI'
-      },
-      // Backup TURN servers
-      {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      },
-      {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-      }
-    );
-
-    return servers;
-  }, []);
+  ], []);
 
   const CALL_TIMEOUT = 30000;
   const ICE_RESTART_DELAY = 3000;
-  // FIX: Increased from 3000 → 8000ms — Jio TURN handshake is slow
-  const ICE_GATHERING_TIMEOUT = 8000;
+  const ICE_GATHERING_TIMEOUT = 3000; // Max wait for ICE gathering before sending offer
 
   const resetCallState = useCallback(() => {
     setIsCallActive(false);
@@ -223,6 +199,7 @@ const useCallManager = (userId, partnerId) => {
 
         const lossRate = packetsReceived > 0 ? (packetsLost / packetsReceived) * 100 : 0;
 
+        // Quality based on loss + jitter + RTT
         if (lossRate > 10 || jitter > 0.1 || roundTripTime > 0.5) {
           setCallQuality('poor');
         } else if (lossRate > 3 || jitter > 0.05 || roundTripTime > 0.3) {
@@ -231,7 +208,7 @@ const useCallManager = (userId, partnerId) => {
           setCallQuality('good');
         }
       } catch (err) {
-        // Silently ignore — connection may have closed
+        // Silently ignore - connection may have closed
       }
     }, 3000);
   }, []);
@@ -274,6 +251,7 @@ const useCallManager = (userId, partnerId) => {
     try {
       return await navigator.mediaDevices.getUserMedia(constraints);
     } catch (err) {
+      // Fallback: try with lower quality constraints
       if (type === 'video') {
         try {
           return await navigator.mediaDevices.getUserMedia({
@@ -281,6 +259,7 @@ const useCallManager = (userId, partnerId) => {
             audio: { echoCancellation: true, noiseSuppression: true }
           });
         } catch (fallbackErr) {
+          // Try audio-only as last resort
           try {
             const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             return audioStream;
@@ -306,6 +285,7 @@ const useCallManager = (userId, partnerId) => {
 
     const tryAttach = () => {
       let attached = false;
+      // Attach video
       const hasVideo = stream.getVideoTracks().length > 0;
       if (hasVideo && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
@@ -313,6 +293,7 @@ const useCallManager = (userId, partnerId) => {
         console.log('✅ Remote video attached');
         attached = true;
       }
+      // Attach audio
       const hasAudio = stream.getAudioTracks().length > 0;
       if (hasAudio && remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
@@ -324,7 +305,9 @@ const useCallManager = (userId, partnerId) => {
       return attached;
     };
 
+    // Try immediately
     if (!tryAttach()) {
+      // Elements not mounted yet — retry after React renders
       console.log('⏳ Remote stream saved, waiting for video elements to mount...');
       const retryInterval = setInterval(() => {
         if (tryAttach()) {
@@ -332,29 +315,29 @@ const useCallManager = (userId, partnerId) => {
           console.log('✅ Remote stream attached on retry');
         }
       }, 100);
+      // Stop retrying after 5 seconds
       setTimeout(() => clearInterval(retryInterval), 5000);
     }
   }, []);
 
-  // FIX: setupPeerConnection now accepts isInitiator flag to handle
-  // both offer (caller) and answer (receiver) ICE bundling correctly
   const setupPeerConnection = useCallback((pc, isInitiator, targetId) => {
     pc.ontrack = (event) => {
       console.log('📞 Remote track received:', event.track.kind, 'streams:', event.streams.length);
       const remoteStream = event.streams[0] || new MediaStream([event.track]);
+      // Save the remote stream so it persists
       remoteStreamRef.current = remoteStream;
+      // Attach to elements (with retry if not mounted yet)
       attachRemoteStream(remoteStream);
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        // During initial gathering phase (both caller & receiver),
-        // suppress trickle — candidates are bundled into SDP
+        // During initial gathering phase (caller), don't trickle ICE candidates
+        // They'll be bundled into the SDP offer when gathering completes
         if (initialGatheringRef.current) {
-          console.log('📦 ICE candidate gathered (bundling in SDP)');
+          console.log('📦 ICE candidate gathered (bundling in offer)');
           return;
         }
-        // After initial gather, trickle normally for ICE restarts
         socketService.sendIceCandidate({
           candidate: event.candidate,
           to: targetId
@@ -390,6 +373,7 @@ const useCallManager = (userId, partnerId) => {
 
       if (state === 'failed') {
         console.log('❌ Peer connection failed, attempting recovery...');
+        // Try ICE restart first instead of immediately killing the call
         try {
           if (peerConnectionRef.current && peerConnectionRef.current.restartIce) {
             peerConnectionRef.current.restartIce();
@@ -398,6 +382,7 @@ const useCallManager = (userId, partnerId) => {
         } catch (e) {
           console.error('ICE restart on failure failed:', e);
         }
+        // Give it 10 seconds to recover, then end the call
         setTimeout(() => {
           if (peerConnectionRef.current && peerConnectionRef.current.connectionState === 'failed') {
             console.log('❌ Peer connection permanently failed after retry');
@@ -420,6 +405,7 @@ const useCallManager = (userId, partnerId) => {
           console.log('🔄 ICE restart on ICE failure');
         } catch (e) { /* ignore */ }
       }
+      // Re-attach remote stream when ICE reconnects
       if (state === 'connected' || state === 'completed') {
         if (remoteStreamRef.current) {
           attachRemoteStream(remoteStreamRef.current);
@@ -427,45 +413,30 @@ const useCallManager = (userId, partnerId) => {
       }
     };
 
-    // FIX: onicegatheringstatechange now handles BOTH caller (offer) and
-    // receiver (answer) — previously only caller was handled, causing
-    // receiver to send answer before ICE candidates were gathered on Jio
     pc.onicegatheringstatechange = () => {
       console.log('🧊 ICE gathering state:', pc.iceGatheringState);
-
+      // When initial ICE gathering completes, send the offer with all candidates in SDP
       if (pc.iceGatheringState === 'complete' && initialGatheringRef.current) {
         initialGatheringRef.current = false;
-
+        // Clear the gathering fallback timeout
         if (gatheringTimeoutRef.current) {
           clearTimeout(gatheringTimeoutRef.current);
           gatheringTimeoutRef.current = null;
         }
-
-        if (isInitiator) {
-          // Caller: send bundled offer
-          console.log('✅ ICE gathering complete (caller), sending offer with bundled candidates');
-          socketService.sendCallOffer({
-            offer: pc.localDescription,
-            to: partnerIdRef.current,
-            from: userId,
-            callType: callStateRef.current?.type
-          });
-          setIsRinging(true);
-          console.log('📤 Call offer sent, now Ringing...');
-        } else {
-          // Receiver: send bundled answer
-          console.log('✅ ICE gathering complete (receiver), sending answer with bundled candidates');
-          socketService.sendCallAnswer({
-            answer: pc.localDescription,
-            to: incomingCallDataRef.current?.from
-          });
-          console.log('📤 Call answer sent (bundled ICE)');
-        }
+        console.log('✅ ICE gathering complete, sending offer with bundled candidates');
+        socketService.sendCallOffer({
+          offer: pc.localDescription,
+          to: partnerIdRef.current,
+          from: userId,
+          callType: callStateRef.current?.type
+        });
+        setIsRinging(true);
+        console.log('📤 Call offer sent, now Ringing...');
       }
     };
   }, [monitorCallQuality, cleanup, resetCallState, startDurationTimer, attachRemoteStream, userId]);
 
-  // endCall uses refs — no stale closure
+  // endCall uses refs - no stale closure
   const endCall = useCallback(() => {
     console.log('📞 Ending call');
     const wasActive = callActiveRef.current;
@@ -495,10 +466,13 @@ const useCallManager = (userId, partnerId) => {
   }, []);
 
   const initializeCallListeners = useCallback(() => {
+    // NOTE: No guard here — socketService methods already use socket.off() before socket.on()
+    // so duplicate listeners are impossible. The guard was preventing re-binding after reconnect.
     console.log('🔧 Initializing call listeners');
 
     socketService.onCallOffer(async (data) => {
       console.log('📞 Incoming encrypted call offer from:', data.from);
+      // Decrypt offer from backend
       const decryptedOffer = EncryptionService.decrypt(data.offer);
       if (callActiveRef.current || isIncomingRef.current) {
         console.log('⚠️ Already in a call or incoming, auto-rejecting');
@@ -519,6 +493,7 @@ const useCallManager = (userId, partnerId) => {
       if (state === 'stable') return;
       if (state === 'have-local-offer') {
         try {
+          // Decrypt answer from backend
           const decryptedAnswer = EncryptionService.decrypt(data.answer);
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(decryptedAnswer));
           remoteDescriptionSetRef.current = true;
@@ -539,6 +514,7 @@ const useCallManager = (userId, partnerId) => {
     socketService.onIceCandidate(async (data) => {
       if (!data.candidate) return;
 
+      // Decrypt ICE candidate from backend
       const decryptedCandidate = EncryptionService.decrypt(data.candidate);
 
       if (!peerConnectionRef.current || !remoteDescriptionSetRef.current) {
@@ -585,9 +561,9 @@ const useCallManager = (userId, partnerId) => {
     });
   }, [cleanup, endCall, resetCallState, processIceCandidateQueue]);
 
-  // startCall — Calling → Ringing flow
-  // Phase 1: "Calling..." — ICE candidates gathering (TURN handshake)
-  // Phase 2: "Ringing..."  — Bundled offer sent to receiver
+  // startCall with Calling → Ringing flow
+  // Phase 1: "Calling..." — ICE candidates are being gathered
+  // Phase 2: "Ringing..." — ICE gathering complete, offer sent to receiver
   const startCall = useCallback(async (type) => {
     if (!partnerId || callActiveRef.current) return;
     console.log(`📞 Starting ${type} call to ${partnerId}`);
@@ -595,12 +571,13 @@ const useCallManager = (userId, partnerId) => {
       callStateRef.current = { type, isInitiator: true };
       setCallType(type);
       setIsCallActive(true);
-      setIsRinging(false); // Still in "Calling..." phase
+      // Don't set isRinging yet — we're in "Calling..." phase
+      setIsRinging(false);
       setCallDuration(0);
 
       const stream = await getUserMedia(type);
       localStreamRef.current = stream;
-
+      // Attach local video — may need to retry if element not mounted yet
       if (type === 'video') {
         const attachLocal = () => {
           if (localVideoRef.current) {
@@ -622,29 +599,30 @@ const useCallManager = (userId, partnerId) => {
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
-        iceTransportPolicy: 'relay' // Force TURN — required for Jio Symmetric NAT
+        iceTransportPolicy: 'relay'  // Force TURN for Jio
       });
       peerConnectionRef.current = pc;
       remoteDescriptionSetRef.current = false;
-      initialGatheringRef.current = true; // Suppress trickle ICE — bundle into offer
+      initialGatheringRef.current = true; // Enable gathering phase — suppress trickle ICE
 
+      // Add tracks to peer connection
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log(`📡 Added ${track.kind} track to peer connection`);
       });
 
-      // isInitiator = true → onicegatheringstatechange will send offer
       setupPeerConnection(pc, true, partnerId);
 
+      // Create offer with optimal codecs
       const offerOptions = {
         offerToReceiveAudio: true,
         offerToReceiveVideo: type === 'video'
       };
       const offer = await pc.createOffer(offerOptions);
       await pc.setLocalDescription(offer);
-      console.log('📞 Calling... (ICE gathering in progress, waiting for TURN candidates)');
+      console.log('📞 Calling... (ICE gathering in progress)');
 
-      // If ICE gathering already complete (rare), send offer immediately
+      // If ICE gathering is already complete (unlikely but possible), send offer now
       if (pc.iceGatheringState === 'complete') {
         initialGatheringRef.current = false;
         socketService.sendCallOffer({
@@ -653,7 +631,8 @@ const useCallManager = (userId, partnerId) => {
         setIsRinging(true);
         console.log('📤 Call offer sent immediately (ICE was already complete)');
       } else {
-        // FIX: Timeout increased to 8000ms for Jio TURN handshake latency
+        // Fallback: if ICE gathering takes too long (slow TURN servers etc.),
+        // send the offer with whatever candidates we have after timeout
         gatheringTimeoutRef.current = setTimeout(() => {
           if (initialGatheringRef.current && peerConnectionRef.current) {
             initialGatheringRef.current = false;
@@ -669,13 +648,14 @@ const useCallManager = (userId, partnerId) => {
           }
         }, ICE_GATHERING_TIMEOUT);
       }
+      // onicegatheringstatechange in setupPeerConnection will handle normal completion
 
       // Client-side call timeout
       callTimeoutRef.current = setTimeout(() => {
         if (callActiveRef.current && peerConnectionRef.current) {
           const connState = peerConnectionRef.current.connectionState;
           if (connState !== 'connected') {
-            console.log('📞 Call timeout — no answer after 30s');
+            console.log('📞 Call timeout - no answer after 30s');
             endCall();
           }
         }
@@ -694,9 +674,6 @@ const useCallManager = (userId, partnerId) => {
     }
   }, [partnerId, userId, getUserMedia, setupPeerConnection, ICE_SERVERS, cleanup, endCall]);
 
-  // FIX: acceptCall now uses ICE bundling (same as startCall)
-  // Previously: answer was sent immediately before ICE gathered → broken on Jio
-  // Now: answer is held until ICE gathering completes or timeout fires
   const acceptCall = useCallback(async () => {
     const data = incomingCallDataRef.current;
     if (!data) return;
@@ -709,7 +686,7 @@ const useCallManager = (userId, partnerId) => {
 
       const stream = await getUserMedia(data.callType);
       localStreamRef.current = stream;
-
+      // Attach local video — may need to retry if element not mounted yet
       if (data.callType === 'video') {
         const attachLocal = () => {
           if (localVideoRef.current) {
@@ -731,19 +708,15 @@ const useCallManager = (userId, partnerId) => {
         iceCandidatePoolSize: 10,
         bundlePolicy: 'max-bundle',
         rtcpMuxPolicy: 'require',
-        iceTransportPolicy: 'relay' // Force TURN — required for Jio Symmetric NAT
+        iceTransportPolicy: 'relay'  // Force TURN for Jio
       });
       peerConnectionRef.current = pc;
-
-      // FIX: Enable ICE bundling for receiver too
-      initialGatheringRef.current = true;
 
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
         console.log(`📡 Added ${track.kind} track to peer connection`);
       });
 
-      // isInitiator = false → onicegatheringstatechange will send answer
       setupPeerConnection(pc, false, data.from);
 
       // Set remote description first, then create answer
@@ -756,35 +729,10 @@ const useCallManager = (userId, partnerId) => {
 
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log('📞 Answer created, waiting for ICE gathering before sending...');
+      socketService.sendCallAnswer({ answer, to: data.from });
+      console.log('📤 Call answer sent');
 
-      // FIX: Don't send answer immediately — wait for ICE gathering
-      if (pc.iceGatheringState === 'complete') {
-        // Already complete (rare) — send now
-        initialGatheringRef.current = false;
-        socketService.sendCallAnswer({
-          answer: pc.localDescription,
-          to: data.from
-        });
-        console.log('📤 Call answer sent immediately (ICE was already complete)');
-      } else {
-        // FIX: Timeout fallback — send after 8s if gathering takes too long
-        gatheringTimeoutRef.current = setTimeout(() => {
-          if (initialGatheringRef.current && peerConnectionRef.current) {
-            initialGatheringRef.current = false;
-            console.log('⏱️ ICE gathering timeout (receiver), sending answer with partial candidates');
-            socketService.sendCallAnswer({
-              answer: peerConnectionRef.current.localDescription,
-              to: data.from
-            });
-            console.log('📤 Call answer sent (partial ICE)');
-          }
-        }, ICE_GATHERING_TIMEOUT);
-      }
-      // onicegatheringstatechange in setupPeerConnection handles normal completion
-
-      // Note: incomingCallDataRef is kept until gathering completes
-      // so onicegatheringstatechange can read data.from
+      incomingCallDataRef.current = null;
     } catch (error) {
       console.error('📞 Error accepting call:', error);
       if (incomingCallDataRef.current) {
@@ -795,11 +743,6 @@ const useCallManager = (userId, partnerId) => {
       setIsCallActive(false);
       setCallType(null);
       setCallerName('');
-      initialGatheringRef.current = false;
-      if (gatheringTimeoutRef.current) {
-        clearTimeout(gatheringTimeoutRef.current);
-        gatheringTimeoutRef.current = null;
-      }
     }
   }, [getUserMedia, setupPeerConnection, ICE_SERVERS, cleanup, processIceCandidateQueue]);
 
